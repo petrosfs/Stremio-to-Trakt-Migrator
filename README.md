@@ -5,6 +5,7 @@
 
 [![Tests & deploy](https://github.com/petrosfs/Stremio-to-Trakt-Migrator/actions/workflows/deploy.yml/badge.svg)](https://github.com/petrosfs/Stremio-to-Trakt-Migrator/actions/workflows/deploy.yml)
 [![Release](https://img.shields.io/github/v/release/petrosfs/Stremio-to-Trakt-Migrator)](https://github.com/petrosfs/Stremio-to-Trakt-Migrator/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 **▶ Άνοιξέ το:** https://petrosfs.github.io/Stremio-to-Trakt-Migrator/
 
@@ -141,3 +142,7 @@ npm run screenshots  # ξαναβγάζει τα screenshots του README (docs
 ## Τεχνολογίες
 
 React 19 · TypeScript · Vite · Tailwind CSS · fflate · Vitest · Playwright · Trakt API v2 · Stremio API · Cinemeta
+
+## Άδεια
+
+[MIT](LICENSE) © petrosfs
