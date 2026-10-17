@@ -30,7 +30,7 @@ import Sidebar from './components/Sidebar';
 import SourceCard, { type SourceTab } from './components/SourceCard';
 import TransferCard, { type Prefs, type Step } from './components/TransferCard';
 import ItemsPanel, { type TypeFilter } from './components/ItemsPanel';
-import ReverseCard from './components/ReverseCard';
+import ReverseCard, { ReversePreview } from './components/ReverseCard';
 import { fetchTraktSide, planReverse, undoChanges, type ReverseOptions, type ReversePlan, type ReverseUndo, type TraktSide } from './lib/reverse';
 
 const DEFAULT_PREFS: Prefs = { library: 'skip', watchlist: 'watchlist', continue: 'watchlist', history: 'history', rated: 'ratings' };
@@ -693,6 +693,8 @@ export default function App() {
   };
 
   // ---------- UI state ----------
+  const [mode, setMode] = useState<'toTrakt' | 'toStremio'>(() => (load<string>('mode') === 'toStremio' ? 'toStremio' : 'toTrakt'));
+  useEffect(() => save('mode', mode), [mode]);
   const [showPanel, setShowPanel] = useState(false);
   const [tab, setTab] = useState<Category>('watchlist');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
@@ -724,6 +726,54 @@ export default function App() {
     </button>
   );
 
+  const modeTabs = (
+    <div role="tablist" aria-label={t('mode.label')} className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
+      {(['toTrakt', 'toStremio'] as const).map((m) => (
+        <button
+          key={m}
+          role="tab"
+          type="button"
+          aria-selected={mode === m}
+          data-testid={`mode-${m}`}
+          disabled={busy && mode !== m}
+          onClick={() => setMode(m)}
+          className={`flex-1 sm:flex-none px-3 py-1.5 rounded-md text-xs font-bold whitespace-nowrap transition-colors disabled:opacity-50 ${
+            mode === m ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          {t(`mode.${m}`)}
+        </button>
+      ))}
+    </div>
+  );
+
+  const sourceCard = (
+    <SourceCard
+      tab={sourceTab}
+      onTab={setSourceTab}
+      stremioUser={stremioAuth?.email || null}
+      busy={loadingLib}
+      disabled={busy}
+      onLogin={stremioLogin}
+      onLink={stremioLink}
+      onReload={() => stremioAuth && loadStremioLibrary(stremioAuth.authKey)}
+      onLogout={stremioLogout}
+      fileName={fileName}
+      onFile={loadFile}
+      episodeDate={episodeDate}
+      onEpisodeDate={setEpisodeDate}
+      showEpisodeDate={mode === 'toTrakt' && source?.kind === 'items' && (parsed?.stats.seriesDecoded || 0) > 0}
+      onDownloadRaw={
+        source?.kind === 'items'
+          ? () => {
+              download(new Blob([JSON.stringify(source.items, null, 2)], { type: 'application/json' }), `stremio_library_raw_${today()}.json`);
+              addLog(t('msg.rawSaved'), 'ok');
+            }
+          : undefined
+      }
+    />
+  );
+
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col lg:flex-row font-sans text-slate-900 selection:bg-indigo-100">
       <Sidebar
@@ -735,13 +785,12 @@ export default function App() {
       />
 
       <main className="flex-1 flex flex-col min-w-0">
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sm:px-8 sticky top-0 z-10 shrink-0 gap-3">
-          <div className="flex items-center gap-2 text-sm min-w-0">
+        <header className="sticky top-0 z-10 shrink-0 bg-white border-b border-slate-200 flex flex-wrap items-center gap-3 px-4 sm:px-8 py-3 sm:py-0 sm:h-16">
+          <div className="flex items-center gap-3 text-sm min-w-0 flex-1 sm:flex-none">
             <img src={logo} alt="" width={28} height={28} className="lg:hidden w-7 h-7 shrink-0" />
-            <span className="text-slate-400 hidden sm:inline">Stremio → Trakt</span>
-            <span className="text-slate-400 hidden sm:inline">/</span>
-            <span className="text-slate-900 font-medium truncate">{t('app.title')}</span>
+            <span className="sm:hidden text-slate-900 font-medium truncate">{t('app.title')}</span>
           </div>
+          <div className="order-last w-full sm:order-none sm:w-auto sm:mr-auto">{modeTabs}</div>
 
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <button
@@ -808,6 +857,40 @@ export default function App() {
             </div>
           )}
 
+          {mode === 'toStremio' ? (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="space-y-6">
+                {sourceCard}
+                <ReverseCard
+                  ready={!!(accountItems && username)}
+                  opts={revOpts}
+                  onOpt={(f, v) => setRevOpts((o) => ({ ...o, [f]: v }))}
+                  plan={revPlan}
+                  checking={revChecking}
+                  applying={revApplying}
+                  undoing={revUndoing}
+                  disabled={syncing || undoing || checking || loadingLib}
+                  status={revStatus}
+                  onCheck={onReverseCheck}
+                  onApply={onReverseApply}
+                  lastWrite={
+                    revUndo && revUndo.account === stremioAuth?.email
+                      ? { count: revUndo.originals.length + revUndo.created.length + revUndo.likes.length, at: revUndo.at }
+                      : null
+                  }
+                  onUndo={onReverseUndo}
+                />
+              </div>
+              <ReversePreview
+                plan={revPlan}
+                need={{ trakt: !!username, stremio: !!stremioAuth && sourceTab === 'account', library: !!accountItems }}
+                checking={revChecking}
+                disabled={busy}
+                onToggle={toggleRev}
+              />
+            </div>
+          ) : (
+          <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
             {statCard('collection', LayoutList)}
             {statCard('watchlist', BookMarked)}
@@ -817,30 +900,7 @@ export default function App() {
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="space-y-6">
-              <SourceCard
-                tab={sourceTab}
-                onTab={setSourceTab}
-                stremioUser={stremioAuth?.email || null}
-                busy={loadingLib}
-                disabled={busy}
-                onLogin={stremioLogin}
-                onLink={stremioLink}
-                onReload={() => stremioAuth && loadStremioLibrary(stremioAuth.authKey)}
-                onLogout={stremioLogout}
-                fileName={fileName}
-                onFile={loadFile}
-                episodeDate={episodeDate}
-                onEpisodeDate={setEpisodeDate}
-                showEpisodeDate={source?.kind === 'items' && (parsed?.stats.seriesDecoded || 0) > 0}
-                onDownloadRaw={
-                  source?.kind === 'items'
-                    ? () => {
-                        download(new Blob([JSON.stringify(source.items, null, 2)], { type: 'application/json' }), `stremio_library_raw_${today()}.json`);
-                        addLog(t('msg.rawSaved'), 'ok');
-                      }
-                    : undefined
-                }
-              />
+              {sourceCard}
 
               {data && (
                 <TransferCard
@@ -869,27 +929,6 @@ export default function App() {
                 />
               )}
 
-              {accountItems && username && (
-                <ReverseCard
-                  opts={revOpts}
-                  onOpt={(f, v) => setRevOpts((o) => ({ ...o, [f]: v }))}
-                  plan={revPlan}
-                  onToggle={toggleRev}
-                  checking={revChecking}
-                  applying={revApplying}
-                  undoing={revUndoing}
-                  disabled={syncing || undoing || checking || loadingLib}
-                  status={revStatus}
-                  onCheck={onReverseCheck}
-                  onApply={onReverseApply}
-                  lastWrite={
-                    revUndo && revUndo.account === stremioAuth?.email
-                      ? { count: revUndo.originals.length + revUndo.created.length + revUndo.likes.length, at: revUndo.at }
-                      : null
-                  }
-                  onUndo={onReverseUndo}
-                />
-              )}
             </div>
 
             <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[320px]">
@@ -981,6 +1020,8 @@ export default function App() {
               )}
             </div>
           </div>
+          </>
+          )}
         </div>
 
         <footer className="min-h-10 bg-slate-50 border-t border-slate-200 px-4 sm:px-8 py-2 flex flex-wrap gap-2 items-center justify-between text-[10px] text-slate-400 font-medium uppercase tracking-widest">

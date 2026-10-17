@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeftRight, ChevronRight, ScanSearch, Undo2, Upload } from 'lucide-react';
+import { ArrowLeftRight, CheckCircle2, ChevronRight, Circle, ScanSearch, Undo2, Upload } from 'lucide-react';
 import { useI18n } from '../i18n';
 import type { ReverseEntry, ReverseOptions, ReversePlan, ReverseSection } from '../lib/reverse';
+import { posterFor } from '../lib/stremio';
 
 interface Props {
+  /** Trakt and a Stremio account library are available. */
+  ready: boolean;
   opts: ReverseOptions;
   onOpt: (field: keyof ReverseOptions, v: boolean) => void;
   plan: ReversePlan | null;
-  /** Includes or excludes titles by entry key. */
-  onToggle: (keys: string[], include: boolean) => void;
   checking: boolean;
   applying: boolean;
   undoing: boolean;
@@ -61,7 +62,7 @@ function Section({
   const selected = entries.filter((e) => e.included).length;
   return (
     <div className="border-t border-slate-100 first:border-t-0" data-testid={`rev-sec-${id}`}>
-      <div className="flex items-center gap-2 px-3 py-2 text-[11px]">
+      <div className="flex items-center gap-3 px-4 sm:px-6 py-3 text-xs">
         {entries.length > 0 ? (
           <TriBox
             label={label}
@@ -88,21 +89,22 @@ function Section({
         </button>
       </div>
       {open && entries.length > 0 && (
-        <ul className="max-h-64 overflow-auto pb-1">
+        <ul className="max-h-[28rem] overflow-auto pb-2">
           {entries.map((e) => (
             <li key={e.key}>
-              <label className="flex items-start gap-2 px-3 py-1.5 pl-8 cursor-pointer hover:bg-slate-50">
+              <label className="flex items-center gap-3 px-4 sm:px-6 py-1.5 pl-10 sm:pl-12 cursor-pointer hover:bg-slate-50">
                 <input
                   type="checkbox"
-                  className="accent-indigo-600 mt-0.5 shrink-0"
+                  className="accent-indigo-600 shrink-0"
                   aria-label={e.name}
                   checked={e.included}
                   disabled={disabled}
                   onChange={(ev) => onToggle([e.key], ev.target.checked)}
                 />
+                <img src={posterFor(e.id)} alt="" loading="lazy" className={`w-7 h-10 rounded object-cover bg-slate-100 shrink-0 ${e.included ? '' : 'opacity-40'}`} />
                 <span className="min-w-0">
-                  <span className={`block text-[11px] font-medium ${e.included ? 'text-slate-800' : 'text-slate-400 line-through'}`}>{e.name}</span>
-                  <span className="block text-[10px] text-slate-500 break-words">{why(e)}</span>
+                  <span className={`block text-xs font-medium ${e.included ? 'text-slate-800' : 'text-slate-400 line-through'}`}>{e.name}</span>
+                  <span className="block text-[11px] text-slate-500 break-words">{why(e)}</span>
                 </span>
               </label>
             </li>
@@ -127,9 +129,8 @@ export default function ReverseCard(p: Props) {
   const { t, lang } = useI18n();
   const [confirmApply, setConfirmApply] = useConfirm();
   const [confirmUndo, setConfirmUndo] = useConfirm();
-  const busy = p.disabled || p.checking || p.applying || p.undoing;
+  const busy = !p.ready || p.disabled || p.checking || p.applying || p.undoing;
   const total = p.plan ? p.plan.changes.length + p.plan.likes.length : 0;
-  const s = p.plan?.summary;
 
   const box = (field: keyof ReverseOptions) => (
     <label className="flex items-center gap-2 cursor-pointer">
@@ -145,23 +146,6 @@ export default function ReverseCard(p: Props) {
     </label>
   );
 
-  const why = (e: ReverseEntry) => {
-    if (e.reason === 'episodes') {
-      const eps = e.episodes || [];
-      return `+${eps.length}: ${eps.slice(0, 12).join(', ')}${eps.length > 12 ? '…' : ''}`;
-    }
-    if (e.reason === 'like') return `Trakt ★${e.rating} → ${e.status === 'loved' ? 'Loved' : 'Liked'}`;
-    const text = t(`reverse.why.${e.reason}`);
-    return e.plays && e.plays > 1 ? `${text} · ${t('reverse.plays', { n: e.plays })}` : text;
-  };
-  const bySection = (sec: ReverseSection) => p.plan?.entries.filter((e) => e.section === sec) || [];
-  const count = (sec: ReverseSection) => {
-    const list = bySection(sec);
-    const sel = list.filter((e) => e.included).length;
-    return sel === list.length ? String(list.length) : `${sel}/${list.length}`;
-  };
-  const sectionProps = (sec: ReverseSection) => ({ id: sec, entries: bySection(sec), why, disabled: busy, onToggle: p.onToggle });
-
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6" data-testid="reverse">
       <h2 className="text-slate-900 font-bold text-lg mb-1 flex items-center gap-2">
@@ -175,28 +159,6 @@ export default function ReverseCard(p: Props) {
         {box('watched')}
         {box('likes')}
       </div>
-
-      {p.plan && s && (
-        <div className="border border-slate-200 rounded-lg overflow-hidden mb-3" data-testid="reverse-plan">
-          <Section {...sectionProps('library')} label={t('reverse.addLib')} value={count('library')} />
-          <Section {...sectionProps('movies')} label={t('reverse.movies')} value={count('movies')} />
-          <Section
-            {...sectionProps('episodes')}
-            label={t('reverse.episodes')}
-            value={t('reverse.episodesIn', { n: s.episodesWatched, s: s.seriesUpdated.length })}
-          />
-          <Section {...sectionProps('likes')} label={t('reverse.likesN')} value={count('likes')} />
-          {s.seriesWithoutEpisodes.length > 0 && (
-            <p className="px-3 py-2 text-[10px] text-amber-700 bg-amber-50 border-t border-amber-100">
-              {t('reverse.noEpisodes', { list: s.seriesWithoutEpisodes.slice(0, 20).join(', ') + (s.seriesWithoutEpisodes.length > 20 ? '…' : '') })}
-            </p>
-          )}
-          {p.plan.entries.length === 0 && <p className="px-3 py-2 text-[11px] text-slate-500 border-t border-slate-100">{t('reverse.nothing')}</p>}
-          {p.plan.entries.length > 0 && total === 0 && (
-            <p className="px-3 py-2 text-[11px] text-slate-500 border-t border-slate-100">{t('reverse.noneSelected')}</p>
-          )}
-        </div>
-      )}
 
       <div className="space-y-3">
         <button
@@ -265,6 +227,96 @@ export default function ReverseCard(p: Props) {
               date: new Date(p.lastWrite.at).toLocaleString(lang === 'el' ? 'el-GR' : 'en-GB', { dateStyle: 'short', timeStyle: 'short' }),
             })}
           </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface PreviewProps {
+  plan: ReversePlan | null;
+  need: { trakt: boolean; stremio: boolean; library: boolean };
+  checking: boolean;
+  disabled: boolean;
+  onToggle: (keys: string[], include: boolean) => void;
+}
+
+/** Right-hand panel of the Trakt → Stremio tab: what is needed, then every title with its reason. */
+export function ReversePreview(p: PreviewProps) {
+  const { t } = useI18n();
+  const s = p.plan?.summary;
+  const total = p.plan ? p.plan.changes.length + p.plan.likes.length : 0;
+  const ready = p.need.trakt && p.need.stremio && p.need.library;
+
+  const why = (e: ReverseEntry) => {
+    if (e.reason === 'episodes') {
+      const eps = e.episodes || [];
+      return `+${eps.length}: ${eps.slice(0, 12).join(', ')}${eps.length > 12 ? '…' : ''}`;
+    }
+    if (e.reason === 'like') return `Trakt ★${e.rating} → ${e.status === 'loved' ? 'Loved' : 'Liked'}`;
+    const text = t(`reverse.why.${e.reason}`);
+    return e.plays && e.plays > 1 ? `${text} · ${t('reverse.plays', { n: e.plays })}` : text;
+  };
+  const bySection = (sec: ReverseSection) => p.plan?.entries.filter((e) => e.section === sec) || [];
+  const count = (sec: ReverseSection) => {
+    const list = bySection(sec);
+    const sel = list.filter((e) => e.included).length;
+    return sel === list.length ? String(list.length) : `${sel}/${list.length}`;
+  };
+  const sectionProps = (sec: ReverseSection) => ({ id: sec, entries: bySection(sec), why, disabled: p.disabled, onToggle: p.onToggle });
+
+  const need = (ok: boolean, label: string) => (
+    <li className="flex items-center gap-2 text-xs">
+      {ok ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> : <Circle className="w-4 h-4 text-slate-300 shrink-0" />}
+      <span className={ok ? 'text-slate-500' : 'text-slate-800 font-semibold'}>{label}</span>
+    </li>
+  );
+
+  return (
+    <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[320px]">
+      <div className="px-4 sm:px-6 py-4 flex flex-wrap gap-3 justify-between items-center border-b border-slate-100">
+        <h2 className="text-slate-900 font-bold text-lg">{t('reverse.preview')}</h2>
+        {p.plan && (
+          <span className="text-[10px] bg-indigo-50 text-indigo-600 px-2 py-1 rounded font-bold uppercase">{t('reverse.toWrite', { n: total })}</span>
+        )}
+      </div>
+      {!ready ? (
+        <div className="p-6 sm:p-8 flex-1 flex flex-col justify-center items-center">
+          <div className="space-y-3">
+            <p className="text-sm font-bold text-slate-800">{t('reverse.need')}</p>
+            <ul className="space-y-2" data-testid="rev-need">
+              {need(p.need.trakt, t('reverse.needTrakt'))}
+              {need(p.need.stremio, t('reverse.needStremio'))}
+              {need(p.need.library, t('reverse.needLibrary'))}
+            </ul>
+          </div>
+        </div>
+      ) : !p.plan || !s ? (
+        <div className="p-6 sm:p-8 flex-1 flex flex-col justify-center items-center text-center gap-3">
+          <div className="w-16 h-16 bg-slate-50 rounded-full border border-slate-100 flex items-center justify-center">
+            <ScanSearch className={`w-6 h-6 text-slate-300 ${p.checking ? 'animate-pulse' : ''}`} />
+          </div>
+          <p className="text-xs text-slate-500 max-w-xs">{p.checking ? t('reverse.checking') : t('reverse.empty')}</p>
+        </div>
+      ) : (
+        <div data-testid="reverse-plan">
+          <Section {...sectionProps('library')} label={t('reverse.addLib')} value={count('library')} />
+          <Section {...sectionProps('movies')} label={t('reverse.movies')} value={count('movies')} />
+          <Section
+            {...sectionProps('episodes')}
+            label={t('reverse.episodes')}
+            value={t('reverse.episodesIn', { n: s.episodesWatched, s: s.seriesUpdated.length })}
+          />
+          <Section {...sectionProps('likes')} label={t('reverse.likesN')} value={count('likes')} />
+          {s.seriesWithoutEpisodes.length > 0 && (
+            <p className="px-4 sm:px-6 py-2 text-[11px] text-amber-700 bg-amber-50 border-t border-amber-100">
+              {t('reverse.noEpisodes', { list: s.seriesWithoutEpisodes.slice(0, 20).join(', ') + (s.seriesWithoutEpisodes.length > 20 ? '…' : '') })}
+            </p>
+          )}
+          {p.plan.entries.length === 0 && <p className="px-4 sm:px-6 py-3 text-xs text-slate-500 border-t border-slate-100">{t('reverse.nothing')}</p>}
+          {p.plan.entries.length > 0 && total === 0 && (
+            <p className="px-4 sm:px-6 py-3 text-xs text-slate-500 border-t border-slate-100">{t('reverse.noneSelected')}</p>
+          )}
         </div>
       )}
     </div>

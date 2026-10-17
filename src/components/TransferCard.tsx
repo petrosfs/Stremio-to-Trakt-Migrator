@@ -141,25 +141,31 @@ export default function TransferCard(p: Props) {
           {p.plan.length > 0 && (
             <div className="border border-slate-200 rounded-lg overflow-hidden" data-testid="plan">
               <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider px-3 pt-3">{t('plan.title')}</p>
-              <table className="w-full text-[11px] mt-2">
+              <table className="w-full table-fixed text-[11px] mt-2">
+                <colgroup>
+                  <col />
+                  <col className="w-[3.75rem]" />
+                  <col className="w-[3.75rem]" />
+                  <col className="w-[3.75rem]" />
+                </colgroup>
                 <thead>
-                  <tr className="text-slate-400 text-left">
+                  <tr className="text-slate-400 text-left align-bottom">
                     <th className="font-medium px-3 py-1" />
-                    <th className="font-medium px-1 py-1 text-right">{t('plan.selected')}</th>
-                    <th className="font-medium px-1 py-1 text-right">{t('plan.existing')}</th>
-                    <th className="font-medium px-3 py-1 text-right">{t('plan.toSend')}</th>
+                    <th className="font-medium text-[10px] leading-tight px-1 py-1 text-right">{t('plan.selected')}</th>
+                    <th className="font-medium text-[10px] leading-tight px-1 py-1 text-right">{t('plan.existing')}</th>
+                    <th className="font-medium text-[10px] leading-tight pl-1 pr-3 py-1 text-right">{t('plan.toSend')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {p.plan.map((s) => (
                     <tr key={s.label + s.dest} className="border-t border-slate-100">
-                      <td className="px-3 py-1.5 text-slate-700">
+                      <td className="px-3 py-1.5 text-slate-700 break-words">
                         <span className="font-semibold">{s.label}</span>
                         <span className="text-slate-400"> → {p.destName(s.dest)}</span>
                       </td>
                       <td className="px-1 py-1.5 text-right text-slate-600">{s.items.length}</td>
                       <td className="px-1 py-1.5 text-right text-slate-400">{s.existing === null ? '–' : s.existing}</td>
-                      <td className="px-3 py-1.5 text-right font-bold text-indigo-600">{s.toSend.length}</td>
+                      <td className="pl-1 pr-3 py-1.5 text-right font-bold text-indigo-600">{s.toSend.length}</td>
                     </tr>
                   ))}
                 </tbody>

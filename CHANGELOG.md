@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0] — 2026-10-18
+
+### Αλλαγές
+- **Δύο καρτέλες στην πάνω μπάρα:** «Stremio → Trakt» και «Trakt → Stremio». Η κατεύθυνση Trakt → Stremio έχει πλέον δική της σελίδα, με την προεπισκόπηση στο μεγάλο πλαίσιο (με εξώφυλλα). Όταν λείπει κάποια σύνδεση, γράφει τι χρειάζεται.
+- Ο πίνακας «Τι θα σταλεί» δεν κόβεται πια στην οθόνη υπολογιστή.
+- Νέο README με screenshots.
+
 ## [1.1.1] — 2026-10-18
 
 ### Αλλαγές
@@ -36,6 +43,7 @@
 - Επιλογή ανά στοιχείο, αναζήτηση, αναίρεση, εξαγωγή CSV/ZIP.
 - Ελληνικά/English, PWA.
 
+[1.2.0]: https://github.com/petrosfs/Stremio-to-Trakt-Migrator/releases/tag/v1.2.0
 [1.1.1]: https://github.com/petrosfs/Stremio-to-Trakt-Migrator/releases/tag/v1.1.1
 [1.1.0]: https://github.com/petrosfs/Stremio-to-Trakt-Migrator/releases/tag/v1.1.0
 [1.0.1]: https://github.com/petrosfs/Stremio-to-Trakt-Migrator/releases/tag/v1.0.1

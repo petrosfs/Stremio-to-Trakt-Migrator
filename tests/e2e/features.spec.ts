@@ -45,9 +45,14 @@ test('likes → Trakt ratings, repeat plays, then only what is new', async ({ pa
 test('Trakt → Stremio: preview, backup, write, undo', async ({ page }) => {
   const rec = await mockApis(page, { traktReverse: true, likes: { tt0068646: 'liked' } });
   await page.goto('./');
+  // Own tab; it lists what is needed until both sides are connected.
+  await page.getByTestId('mode-toStremio').click();
+  await expect(page.getByTestId('rev-need')).toContainText('Σύνδεση στο Trakt');
+  await expect(page.getByTestId('rev-check')).toBeDisabled();
   await setTraktKeys(page);
   await connectTrakt(page);
   await stremioLogin(page);
+  await expect(page.getByTestId('rev-need')).toHaveCount(0);
 
   const card = page.getByTestId('reverse');
   await card.getByRole('button', { name: 'Τι λείπει από το Stremio' }).click();
@@ -101,7 +106,9 @@ test('Trakt → Stremio: preview, backup, write, undo', async ({ page }) => {
   ]);
 
   // The library is reloaded with the new item.
+  await page.getByTestId('mode-toTrakt').click();
   await expect(page.getByTestId('stat-collection')).toContainText('6');
+  await page.getByTestId('mode-toStremio').click();
 
   // Undo puts everything back and clears the likes.
   await page.getByTestId('rev-undo').click();
@@ -115,6 +122,8 @@ test('Trakt → Stremio: preview, backup, write, undo', async ({ page }) => {
     ['tt0111161', null],
     ['tt0903747', null],
   ]);
+  await page.getByTestId('mode-toTrakt').click();
   await expect(page.getByTestId('stat-collection')).toContainText('5');
+  await page.getByTestId('mode-toStremio').click();
   await expect(page.getByTestId('rev-undo')).toHaveCount(0);
 });
