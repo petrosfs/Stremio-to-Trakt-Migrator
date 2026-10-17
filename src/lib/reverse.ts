@@ -30,7 +30,39 @@ export interface Created {
   name: string;
 }
 
+export type ReverseSection = 'library' | 'movies' | 'episodes' | 'likes';
+/** Why an item is in the plan. */
+export type ReverseReason = 'missing' | 'removed' | 'continue' | 'temp' | 'unwatched' | 'episodes' | 'like';
+
+/** One title in the preview; excluded ones stay listed but are not written. */
+export interface ReverseEntry {
+  key: string;
+  section: ReverseSection;
+  id: string;
+  name: string;
+  reason: ReverseReason;
+  /** Episodes (S01E07…) for series, Trakt plays for movies. */
+  episodes?: string[];
+  plays?: number;
+  rating?: number;
+  status?: LikeStatus;
+  included: boolean;
+}
+
+export const entryKey = (section: ReverseSection, id: string) => `${section}:${id}`;
+
+/** Why a Trakt watchlist item is not in the Stremio library. */
+function libraryReason(existing: any): ReverseReason {
+  if (!existing) return 'missing';
+  if (existing.temp) return Number(existing.state?.timeOffset) > 0 ? 'continue' : 'temp';
+  return 'removed';
+}
+
+const pad = (n: number | undefined) => String(n ?? 0).padStart(2, '0');
+
 export interface ReversePlan {
+  /** Every candidate title, included or not. */
+  entries: ReverseEntry[];
   /** Library items to write with datastorePut. */
   changes: any[];
   /** Previous versions of items that already existed (for undo). */
@@ -95,7 +127,16 @@ export function planReverse(
   currentLikes: Record<string, LikeStatus>,
   opts: ReverseOptions,
   now = new Date().toISOString(),
+  exclude: ReadonlySet<string> = new Set(),
 ): ReversePlan {
+  const entries: ReverseEntry[] = [];
+  /** Lists the entry; returns whether it should be written. */
+  const add = (e: Omit<ReverseEntry, 'key' | 'included'>) => {
+    const key = entryKey(e.section, e.id);
+    const included = !exclude.has(key);
+    entries.push({ ...e, key, included });
+    return included;
+  };
   const byId = new Map<string, any>();
   for (const x of library) if (typeof x?._id === 'string') byId.set(x._id, x);
 
@@ -131,6 +172,7 @@ export function planReverse(
     for (const w of trakt.watchlist) {
       const existing = changed.get(w.id) || byId.get(w.id);
       if (existing && existing.removed !== true) continue;
+      if (!add({ section: 'library', id: w.id, name: w.name, reason: libraryReason(byId.get(w.id)) })) continue;
       const item = working(w.id, w.type, w.name, true);
       item.removed = false;
       item.temp = false;
@@ -143,6 +185,7 @@ export function planReverse(
       const existing = changed.get(id) || byId.get(id);
       const st = existing?.state || {};
       if (existing && (st.flaggedWatched === 1 || Number(st.timesWatched) > 0)) continue;
+      if (!add({ section: 'movies', id, name: m.name, reason: byId.has(id) ? 'unwatched' : 'missing', plays: m.plays })) continue;
       const item = working(id, 'movie', m.name, false);
       item.state.flaggedWatched = 1;
       item.state.timesWatched = Math.max(Number(item.state.timesWatched) || 0, m.plays);
@@ -166,14 +209,16 @@ export function planReverse(
         continue;
       }
       const current = prev ? decodeWatched(prev, ids) : ids.map(() => false);
-      let added = 0;
+      const newEpisodes: string[] = [];
       const flags = videos.map((v, i) => {
         if (current[i]) return true;
         const hit = sh.episodes.has(`${v.season}:${v.episode}`);
-        if (hit) added++;
+        if (hit) newEpisodes.push(`S${pad(v.season)}E${pad(v.episode)}`);
         return hit;
       });
+      const added = newEpisodes.length;
       if (!added) continue;
+      if (!add({ section: 'episodes', id, name: sh.name, reason: 'episodes', episodes: newEpisodes })) continue;
       const item = working(id, 'series', sh.name, false);
       item.state.watched = encodeWatched(ids, flags);
       item.state.timesWatched = Math.max(Number(item.state.timesWatched) || 0, flags.filter(Boolean).length);
@@ -188,11 +233,12 @@ export function planReverse(
     for (const [id, r] of Object.entries(trakt.ratings)) {
       const status = likeForRating(r.rating);
       if (!status || currentLikes[id]) continue; // never overwrite an existing like
+      if (!add({ section: 'likes', id, name: r.name, reason: 'like', rating: r.rating, status })) continue;
       likes.push({ id, type: r.type, name: r.name, status });
     }
   }
 
-  return { changes: [...changed.values()], originals, created, likes, summary };
+  return { entries, changes: [...changed.values()], originals, created, likes, summary };
 }
 
 /** Reads what is needed from Trakt for the reverse direction. */

@@ -47,7 +47,10 @@ export interface MockOptions {
 
 /** Trakt data used by the Trakt → Stremio tests. */
 export const TRAKT_REVERSE: Record<string, any[]> = {
-  '/sync/watchlist/movies': [{ movie: { title: 'Dune', ids: { imdb: 'tt1160419' } } }],
+  '/sync/watchlist/movies': [
+    { movie: { title: 'Dune', ids: { imdb: 'tt1160419' } } },
+    { movie: { title: 'Interstellar', ids: { imdb: 'tt0816692' } } },
+  ],
   '/sync/watchlist/shows': [{ show: { title: 'Breaking Bad', ids: { imdb: 'tt0903747' } } }],
   '/sync/history/movies': [
     { watched_at: '2022-01-01T20:00:00.000Z', movie: { title: 'Inception', ids: { imdb: 'tt1375666' } } },

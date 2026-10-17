@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1] — 2026-10-18
+
+### Αλλαγές
+- **Trakt → Stremio, προεπισκόπηση:** κάθε ενότητα ανοίγει με βελάκι και δείχνει τους τίτλους με την αιτία για τον καθένα (π.χ. «Δεν υπάρχει στο Stremio», «Το είχες αφαιρέσει από τη βιβλιοθήκη», «Μόνο στο Continue Watching», τα νέα επεισόδια, η βαθμολογία Trakt). Μπορείς να εξαιρέσεις τίτλους έναν-έναν ή όλη την ενότητα.
+- **Προειδοποίηση πριν την εφαρμογή:** εξηγεί ότι οι αλλαγές γράφονται στον λογαριασμό Stremio, ότι δεν αναιρούνται πλήρως και πώς λειτουργεί η αναίρεση.
+- Οι αλλαγές στο Stremio παίρνουν ως ώρα τροποποίησης τη στιγμή της εγγραφής και όχι του ελέγχου.
+
 ## [1.1.0] — 2026-10-17
 
 ### Νέα
@@ -29,6 +36,7 @@
 - Επιλογή ανά στοιχείο, αναζήτηση, αναίρεση, εξαγωγή CSV/ZIP.
 - Ελληνικά/English, PWA.
 
+[1.1.1]: https://github.com/petrosfs/Stremio-to-Trakt-Migrator/releases/tag/v1.1.1
 [1.1.0]: https://github.com/petrosfs/Stremio-to-Trakt-Migrator/releases/tag/v1.1.0
 [1.0.1]: https://github.com/petrosfs/Stremio-to-Trakt-Migrator/releases/tag/v1.0.1
 [1.0.0]: https://github.com/petrosfs/Stremio-to-Trakt-Migrator/releases/tag/v1.0.0

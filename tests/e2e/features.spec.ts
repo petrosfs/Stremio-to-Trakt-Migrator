@@ -52,14 +52,34 @@ test('Trakt → Stremio: preview, backup, write, undo', async ({ page }) => {
   const card = page.getByTestId('reverse');
   await card.getByRole('button', { name: 'Τι λείπει από το Stremio' }).click();
   const plan = page.getByTestId('reverse-plan');
-  await expect(plan).toContainText('Στη βιβλιοθήκη');
-  await expect(plan.locator('summary', { hasText: 'Στη βιβλιοθήκη' })).toContainText('1');
-  await expect(plan.locator('summary', { hasText: 'Ταινίες' })).toContainText('1');
-  await expect(plan.locator('summary', { hasText: 'Επεισόδια' })).toContainText('1 σε 1 σειρές');
-  await expect(plan.locator('summary', { hasText: 'Likes' })).toContainText('2');
+  const lib = page.getByTestId('rev-sec-library');
+  await expect(lib).toContainText('2');
+  // Each title shows why it is listed.
+  await expect(lib.locator('li', { hasText: 'Dune' })).toContainText('Δεν υπάρχει στο Stremio');
+  await expect(lib.locator('li', { hasText: 'Interstellar' })).toContainText('Το είχες αφαιρέσει από τη βιβλιοθήκη');
+  await expect(page.getByTestId('rev-sec-movies')).toContainText('1');
+  await expect(page.getByTestId('rev-sec-movies')).toContainText('Στο Stremio χωρίς σημείωση «δει» · 2 προβολές στο Trakt');
+  await expect(page.getByTestId('rev-sec-episodes')).toContainText('1 σε 1 σειρές');
+  await expect(page.getByTestId('rev-sec-episodes')).toContainText('+1: S01E07');
+  await expect(page.getByTestId('rev-sec-likes')).toContainText('Trakt ★10 → Loved');
+  await expect(page.getByTestId('rev-apply')).toContainText('(6)');
+
+  // Titles can be left out one by one.
+  await lib.getByLabel('Interstellar').uncheck();
+  await expect(lib).toContainText('1/2');
+  await expect(page.getByTestId('rev-apply')).toContainText('(5)');
+  // The section box selects all from a partial selection, then clears all.
+  await lib.getByLabel('Στη βιβλιοθήκη').check();
+  await expect(page.getByTestId('rev-apply')).toContainText('(6)');
+  await lib.getByLabel('Στη βιβλιοθήκη').uncheck();
+  await expect(lib).toContainText('0/2');
+  await lib.getByLabel('Interstellar').check();
+  await lib.getByLabel('Interstellar').uncheck();
+  await lib.getByLabel('Dune').check();
   // Nothing has been written yet.
   expect(rec.puts).toEqual([]);
 
+  await expect(page.getByTestId('rev-warning')).toContainText('Δεν αναιρούνται πλήρως');
   const apply = page.getByTestId('rev-apply');
   await expect(apply).toContainText('(5)');
   await apply.click();

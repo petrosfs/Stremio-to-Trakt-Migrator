@@ -151,6 +151,45 @@ describe('planReverse', () => {
   });
 });
 
+describe('planReverse entries', () => {
+  const library = [
+    lib('tt1', { removed: true }),
+    lib('tt2', { removed: true, temp: true, state: { timeOffset: 1000, duration: 5000 } }),
+    lib('tt3', { removed: true, temp: true, state: { timesWatched: 1 } }),
+  ];
+  const trakt = side({
+    watchlist: ['tt1', 'tt2', 'tt3', 'tt4'].map((id) => ({ id, type: 'movie' as const, name: id })),
+    ratings: { tt5: { type: 'movie', name: 'Five', rating: 9 } },
+  });
+
+  it('explains why each title is listed', () => {
+    const p = planReverse(library, trakt, {}, {}, ALL, NOW);
+    expect(p.entries.map((e) => [e.key, e.reason])).toEqual([
+      ['library:tt1', 'removed'],
+      ['library:tt2', 'continue'],
+      ['library:tt3', 'temp'],
+      ['library:tt4', 'missing'],
+      ['likes:tt5', 'like'],
+    ]);
+    expect(p.entries.every((e) => e.included)).toBe(true);
+  });
+
+  it('keeps excluded titles listed but does not write them', () => {
+    const p = planReverse(library, trakt, {}, {}, ALL, NOW, new Set(['library:tt1', 'library:tt4', 'likes:tt5']));
+    expect(p.entries.filter((e) => !e.included).map((e) => e.key)).toEqual(['library:tt1', 'library:tt4', 'likes:tt5']);
+    expect(p.changes.map((c) => c._id)).toEqual(['tt2', 'tt3']);
+    expect(p.created).toEqual([]);
+    expect(p.originals.map((o) => o._id)).toEqual(['tt2', 'tt3']);
+    expect(p.likes).toEqual([]);
+    expect(p.summary.addedToLibrary).toEqual(['tt2', 'tt3']);
+  });
+
+  it('lists the new episodes of a show', () => {
+    const p = planReverse([], side({ shows: { [SHOW]: { name: 'Show', episodes: new Set(['1:2', '1:4']), last: NOW } } }), metas, {}, ALL, NOW);
+    expect(p.entries[0]).toMatchObject({ section: 'episodes', episodes: ['S01E02', 'S01E04'] });
+  });
+});
+
 describe('undoChanges', () => {
   it('restores originals and hides created items', () => {
     const orig = lib('tt2', { removed: true });

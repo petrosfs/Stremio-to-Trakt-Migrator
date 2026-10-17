@@ -31,7 +31,7 @@ import SourceCard, { type SourceTab } from './components/SourceCard';
 import TransferCard, { type Prefs, type Step } from './components/TransferCard';
 import ItemsPanel, { type TypeFilter } from './components/ItemsPanel';
 import ReverseCard from './components/ReverseCard';
-import { fetchTraktSide, planReverse, undoChanges, type ReverseOptions, type ReversePlan, type ReverseUndo } from './lib/reverse';
+import { fetchTraktSide, planReverse, undoChanges, type ReverseOptions, type ReversePlan, type ReverseUndo, type TraktSide } from './lib/reverse';
 
 const DEFAULT_PREFS: Prefs = { library: 'skip', watchlist: 'watchlist', continue: 'watchlist', history: 'history', rated: 'ratings' };
 
@@ -553,21 +553,40 @@ export default function App() {
 
   // ---------- Trakt → Stremio ----------
   const [revOpts, setRevOpts] = useState<ReverseOptions>(() => ({ watchlist: true, watched: true, likes: true, ...(load<ReverseOptions>('reverse_opts') || {}) }));
-  const [revPlan, setRevPlan] = useState<ReversePlan | null>(null);
+  // What was read for the preview; the plan is rebuilt from it when titles are (de)selected.
+  const [revInput, setRevInput] = useState<{ side: TraktSide; metas: Record<string, stremio.SeriesMeta>; likes: Record<string, stremio.LikeStatus>; now: string } | null>(null);
+  const [revExclude, setRevExclude] = useState<Set<string>>(new Set());
   const [revChecking, setRevChecking] = useState(false);
   const [revApplying, setRevApplying] = useState(false);
   const [revUndoing, setRevUndoing] = useState(false);
   const [revStatus, setRevStatus] = useState('');
   const [revUndo, setRevUndo] = useState<ReverseUndo | null>(() => load<ReverseUndo>('reverse_undo'));
   useEffect(() => save('reverse_opts', revOpts), [revOpts]);
-  useEffect(() => setRevPlan(null), [source, revOpts, username]);
+  useEffect(() => {
+    setRevInput(null);
+    setRevExclude(new Set());
+  }, [source, revOpts, username]);
 
   const accountItems = source?.kind === 'items' && !fileName && stremioAuth ? source.items : null;
+  const revPlan = useMemo<ReversePlan | null>(
+    () => (revInput && accountItems ? planReverse(accountItems, revInput.side, revInput.metas, revInput.likes, revOpts, revInput.now, revExclude) : null),
+    [revInput, accountItems, revOpts, revExclude],
+  );
+  const toggleRev = (keys: string[], include: boolean) =>
+    setRevExclude((prev) => {
+      const next = new Set(prev);
+      for (const k of keys) {
+        if (include) next.delete(k);
+        else next.add(k);
+      }
+      return next;
+    });
 
   const onReverseCheck = async () => {
     if (!client || !stremioAuth || !accountItems) return;
     setRevChecking(true);
-    setRevPlan(null);
+    setRevInput(null);
+    setRevExclude(new Set());
     try {
       addLog(t('msg.reverseFetch'));
       setRevStatus('Trakt…');
@@ -590,8 +609,9 @@ export default function App() {
         const more = await stremio.fetchLikes(stremioAuth.authKey, unknown, (d) => setRevStatus(`Likes ${d}/${unknown.length}`));
         likes = { ...likes, ...more };
       }
-      const plan = planReverse(accountItems, side, allMetas, likes, revOpts);
-      setRevPlan(plan);
+      const now = new Date().toISOString();
+      const plan = planReverse(accountItems, side, allMetas, likes, revOpts, now);
+      setRevInput({ side, metas: allMetas, likes, now });
       addLog(
         t('msg.reversePlan', {
           lib: plan.summary.addedToLibrary.length,
@@ -617,8 +637,11 @@ export default function App() {
       download(new Blob([JSON.stringify(accountItems, null, 2)], { type: 'application/json' }), `stremio_library_backup_${today()}.json`);
       addLog(t('msg.rawSaved'), 'ok');
       const undo: ReverseUndo = { at: Date.now(), account: stremioAuth.email, originals: revPlan.originals, created: revPlan.created, likes: [] };
-      if (revPlan.changes.length) {
-        await stremio.putLibrary(stremioAuth.authKey, revPlan.changes, (d) => setRevStatus(`Stremio ${d}/${revPlan.changes.length}`));
+      // Stamp with the time of writing, so every Stremio app sees these as the newest version.
+      const stamp = new Date().toISOString();
+      const changes = revPlan.changes.map((c) => ({ ...c, _mtime: stamp }));
+      if (changes.length) {
+        await stremio.putLibrary(stremioAuth.authKey, changes, (d) => setRevStatus(`Stremio ${d}/${changes.length}`));
       }
       let failed = 0;
       for (const [i, l] of revPlan.likes.entries()) {
@@ -630,7 +653,7 @@ export default function App() {
       save('reverse_undo', undo);
       addLog(t('msg.reverseDone', { n: revPlan.changes.length, likes: undo.likes.length }), 'ok');
       if (failed) addLog(t('msg.likesFailed', { n: failed }), 'err');
-      setRevPlan(null);
+      setRevInput(null);
       await loadStremioLibrary(stremioAuth.authKey);
     } catch (e) {
       addLog(errText(t, e), 'err');
@@ -851,6 +874,7 @@ export default function App() {
                   opts={revOpts}
                   onOpt={(f, v) => setRevOpts((o) => ({ ...o, [f]: v }))}
                   plan={revPlan}
+                  onToggle={toggleRev}
                   checking={revChecking}
                   applying={revApplying}
                   undoing={revUndoing}

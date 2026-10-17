@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react';
-import { ArrowLeftRight, ScanSearch, Undo2, Upload } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { ArrowLeftRight, ChevronRight, ScanSearch, Undo2, Upload } from 'lucide-react';
 import { useI18n } from '../i18n';
-import type { ReverseOptions, ReversePlan } from '../lib/reverse';
+import type { ReverseEntry, ReverseOptions, ReversePlan, ReverseSection } from '../lib/reverse';
 
 interface Props {
   opts: ReverseOptions;
   onOpt: (field: keyof ReverseOptions, v: boolean) => void;
   plan: ReversePlan | null;
+  /** Includes or excludes titles by entry key. */
+  onToggle: (keys: string[], include: boolean) => void;
   checking: boolean;
   applying: boolean;
   undoing: boolean;
@@ -16,6 +18,99 @@ interface Props {
   onApply: () => void;
   lastWrite: { count: number; at: number } | null;
   onUndo: () => void;
+}
+
+/** Checkbox that can show a partial selection. */
+function TriBox({ checked, partial, disabled, label, onChange }: { checked: boolean; partial: boolean; disabled: boolean; label: string; onChange: (v: boolean) => void }) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = partial;
+  }, [partial]);
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      className="accent-indigo-600 shrink-0"
+      aria-label={label}
+      checked={checked}
+      disabled={disabled}
+      onClick={(e) => e.stopPropagation()}
+      onChange={(e) => onChange(e.target.checked)}
+    />
+  );
+}
+
+function Section({
+  id,
+  label,
+  entries,
+  value,
+  why,
+  disabled,
+  onToggle,
+}: {
+  id: ReverseSection;
+  label: string;
+  entries: ReverseEntry[];
+  value: string;
+  why: (e: ReverseEntry) => string;
+  disabled: boolean;
+  onToggle: (keys: string[], include: boolean) => void;
+}) {
+  const [open, setOpen] = useState(entries.length > 0 && entries.length <= 15);
+  const selected = entries.filter((e) => e.included).length;
+  return (
+    <div className="border-t border-slate-100 first:border-t-0" data-testid={`rev-sec-${id}`}>
+      <div className="flex items-center gap-2 px-3 py-2 text-[11px]">
+        {entries.length > 0 ? (
+          <TriBox
+            label={label}
+            checked={selected === entries.length}
+            partial={selected > 0 && selected < entries.length}
+            disabled={disabled}
+            onChange={(v) => onToggle(entries.map((e) => e.key), v)}
+          />
+        ) : (
+          <span className="w-[13px] shrink-0" />
+        )}
+        <button
+          type="button"
+          disabled={!entries.length}
+          aria-expanded={open}
+          onClick={() => setOpen((o) => !o)}
+          className="flex-1 flex items-center justify-between gap-2 text-left disabled:cursor-default"
+        >
+          <span className="flex items-center gap-1 text-slate-700 font-semibold">
+            {label}
+            {entries.length > 0 && <ChevronRight className={`w-3.5 h-3.5 text-slate-400 transition-transform ${open ? 'rotate-90' : ''}`} />}
+          </span>
+          <span className="font-bold text-indigo-600 whitespace-nowrap">{value}</span>
+        </button>
+      </div>
+      {open && entries.length > 0 && (
+        <ul className="max-h-64 overflow-auto pb-1">
+          {entries.map((e) => (
+            <li key={e.key}>
+              <label className="flex items-start gap-2 px-3 py-1.5 pl-8 cursor-pointer hover:bg-slate-50">
+                <input
+                  type="checkbox"
+                  className="accent-indigo-600 mt-0.5 shrink-0"
+                  aria-label={e.name}
+                  checked={e.included}
+                  disabled={disabled}
+                  onChange={(ev) => onToggle([e.key], ev.target.checked)}
+                />
+                <span className="min-w-0">
+                  <span className={`block text-[11px] font-medium ${e.included ? 'text-slate-800' : 'text-slate-400 line-through'}`}>{e.name}</span>
+                  <span className="block text-[10px] text-slate-500 break-words">{why(e)}</span>
+                </span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 function useConfirm() {
@@ -50,20 +145,22 @@ export default function ReverseCard(p: Props) {
     </label>
   );
 
-  const line = (label: string, value: string | number, names?: string[]) => (
-    <details className="border-t border-slate-100 first:border-t-0">
-      <summary className={`flex justify-between gap-2 px-3 py-1.5 text-[11px] ${names?.length ? 'cursor-pointer' : 'list-none'}`}>
-        <span className="text-slate-700 font-semibold">{label}</span>
-        <span className="font-bold text-indigo-600">{value}</span>
-      </summary>
-      {names && names.length > 0 && (
-        <p className="px-3 pb-2 text-[10px] text-slate-500 break-words">
-          {names.slice(0, 60).join(', ')}
-          {names.length > 60 ? '…' : ''}
-        </p>
-      )}
-    </details>
-  );
+  const why = (e: ReverseEntry) => {
+    if (e.reason === 'episodes') {
+      const eps = e.episodes || [];
+      return `+${eps.length}: ${eps.slice(0, 12).join(', ')}${eps.length > 12 ? '…' : ''}`;
+    }
+    if (e.reason === 'like') return `Trakt ★${e.rating} → ${e.status === 'loved' ? 'Loved' : 'Liked'}`;
+    const text = t(`reverse.why.${e.reason}`);
+    return e.plays && e.plays > 1 ? `${text} · ${t('reverse.plays', { n: e.plays })}` : text;
+  };
+  const bySection = (sec: ReverseSection) => p.plan?.entries.filter((e) => e.section === sec) || [];
+  const count = (sec: ReverseSection) => {
+    const list = bySection(sec);
+    const sel = list.filter((e) => e.included).length;
+    return sel === list.length ? String(list.length) : `${sel}/${list.length}`;
+  };
+  const sectionProps = (sec: ReverseSection) => ({ id: sec, entries: bySection(sec), why, disabled: busy, onToggle: p.onToggle });
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6" data-testid="reverse">
@@ -81,16 +178,23 @@ export default function ReverseCard(p: Props) {
 
       {p.plan && s && (
         <div className="border border-slate-200 rounded-lg overflow-hidden mb-3" data-testid="reverse-plan">
-          {line(t('reverse.addLib'), s.addedToLibrary.length, s.addedToLibrary)}
-          {line(t('reverse.movies'), s.moviesWatched.length, s.moviesWatched)}
-          {line(t('reverse.episodes'), t('reverse.episodesIn', { n: s.episodesWatched, s: s.seriesUpdated.length }), s.seriesUpdated)}
-          {line(t('reverse.likesN'), p.plan.likes.length, p.plan.likes.map((l) => `${l.name} (${l.status === 'loved' ? 'Loved' : 'Liked'})`))}
+          <Section {...sectionProps('library')} label={t('reverse.addLib')} value={count('library')} />
+          <Section {...sectionProps('movies')} label={t('reverse.movies')} value={count('movies')} />
+          <Section
+            {...sectionProps('episodes')}
+            label={t('reverse.episodes')}
+            value={t('reverse.episodesIn', { n: s.episodesWatched, s: s.seriesUpdated.length })}
+          />
+          <Section {...sectionProps('likes')} label={t('reverse.likesN')} value={count('likes')} />
           {s.seriesWithoutEpisodes.length > 0 && (
             <p className="px-3 py-2 text-[10px] text-amber-700 bg-amber-50 border-t border-amber-100">
               {t('reverse.noEpisodes', { list: s.seriesWithoutEpisodes.slice(0, 20).join(', ') + (s.seriesWithoutEpisodes.length > 20 ? '…' : '') })}
             </p>
           )}
-          {total === 0 && <p className="px-3 py-2 text-[11px] text-slate-500 border-t border-slate-100">{t('reverse.nothing')}</p>}
+          {p.plan.entries.length === 0 && <p className="px-3 py-2 text-[11px] text-slate-500 border-t border-slate-100">{t('reverse.nothing')}</p>}
+          {p.plan.entries.length > 0 && total === 0 && (
+            <p className="px-3 py-2 text-[11px] text-slate-500 border-t border-slate-100">{t('reverse.noneSelected')}</p>
+          )}
         </div>
       )}
 
@@ -107,6 +211,15 @@ export default function ReverseCard(p: Props) {
 
         {p.plan && total > 0 && (
           <>
+            <div className="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-1" data-testid="rev-warning">
+              <p className="font-bold">{t('reverse.warnTitle')}</p>
+              <ul className="list-disc pl-4 space-y-1">
+                <li>{t('reverse.warn1')}</li>
+                <li>{t('reverse.warn2')}</li>
+                <li>{t('reverse.warn3')}</li>
+                <li>{t('reverse.warn4')}</li>
+              </ul>
+            </div>
             <button
               onClick={() => {
                 if (confirmApply) {
@@ -123,7 +236,6 @@ export default function ReverseCard(p: Props) {
               <Upload className="w-4 h-4" />
               {p.applying ? t('reverse.applying') : confirmApply ? t('reverse.applyConfirm') : `${t('reverse.apply')} (${total})`}
             </button>
-            <p className="text-[10px] text-slate-400 text-center">{t('reverse.backupHint')}</p>
           </>
         )}
         {p.status && <p className="text-[10px] text-indigo-600 font-bold text-center">{p.status}</p>}
