@@ -1,7 +1,16 @@
 import type { TraktAuth, TraktKeys, TraktList } from '../types';
 
 export const TRAKT_API = 'https://api.trakt.tv';
-const OOB_REDIRECT = 'urn:ietf:wg:oauth:2.0:oob';
+/** Trakt asks for all OAuth requests to go to the auth hostname. */
+export const TRAKT_AUTH = 'https://auth.trakt.tv';
+/**
+ * The redirect URI registered in the user's Trakt app. The device flow never redirects,
+ * but Trakt requires it to match when refreshing a token, so we use this page's address.
+ */
+export function appRedirectUri(): string {
+  const { origin, pathname } = window.location;
+  return origin + pathname.replace(/index\.html$/, '');
+}
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -12,11 +21,19 @@ export class TraktError extends Error {
 }
 
 async function postJson(path: string, body: unknown): Promise<Response> {
-  return fetch(`${TRAKT_API}${path}`, {
+  return fetch(`${TRAKT_AUTH}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
+}
+
+/**
+ * The client secret is optional (deprecated by Trakt; new apps get none and sign in
+ * with the Client ID only). It is sent only when the user entered one.
+ */
+export function secretPart(keys: TraktKeys): { client_secret?: string } {
+  return keys.clientSecret ? { client_secret: keys.clientSecret } : {};
 }
 
 function toAuth(t: any): TraktAuth {
@@ -76,7 +93,7 @@ export async function pollDeviceToken(
       res = await postJson('/oauth/device/token', {
         code: code.deviceCode,
         client_id: keys.clientId,
-        client_secret: keys.clientSecret,
+        ...secretPart(keys),
       });
     } catch {
       continue; // temporary network problem: keep polling
@@ -102,8 +119,8 @@ export async function refreshToken(keys: TraktKeys, auth: TraktAuth): Promise<Tr
   const res = await postJson('/oauth/token', {
     refresh_token: auth.refreshToken,
     client_id: keys.clientId,
-    client_secret: keys.clientSecret,
-    redirect_uri: OOB_REDIRECT,
+    ...secretPart(keys),
+    redirect_uri: appRedirectUri(),
     grant_type: 'refresh_token',
   });
   if (!res.ok) throw new TraktError(res.status, 'err.refresh');
@@ -115,7 +132,7 @@ export async function revokeToken(keys: TraktKeys, auth: TraktAuth): Promise<voi
     await postJson('/oauth/revoke', {
       token: auth.accessToken,
       client_id: keys.clientId,
-      client_secret: keys.clientSecret,
+      ...secretPart(keys),
     });
   } catch {
     /* best effort */

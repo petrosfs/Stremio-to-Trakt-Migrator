@@ -1,4 +1,5 @@
-import { History, LogOut } from 'lucide-react';
+import { LogOut } from 'lucide-react';
+import logo from '../assets/logo.svg';
 import { useI18n } from '../i18n';
 import type { LogEntry } from '../types';
 
@@ -29,10 +30,8 @@ export default function Sidebar({ logs, traktUser, stremioUser, onTraktLogout, o
   return (
     <aside className="order-last lg:order-first lg:w-80 lg:h-screen lg:sticky lg:top-0 bg-slate-900 flex flex-col shrink-0">
       <div className="p-6 hidden lg:flex items-center gap-3">
-        <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center">
-          <History className="w-4 h-4 text-white" />
-        </div>
-        <span className="text-white font-bold tracking-tight uppercase text-sm">Stremio2Trakt v{__APP_VERSION__}</span>
+        <img src={logo} alt="" width={32} height={32} className="w-8 h-8" />
+        <span className="text-white font-bold tracking-tight uppercase text-sm">Stremio2Trakt</span>
       </div>
 
       <div className="flex-1 px-4 pt-6 lg:pt-0 overflow-hidden flex flex-col">
@@ -79,7 +78,6 @@ export default function Sidebar({ logs, traktUser, stremioUser, onTraktLogout, o
           {account('Trakt', traktUser, onTraktLogout, 'text-indigo-400')}
           {account('Stremio', stremioUser, onStremioLogout, 'text-violet-400')}
         </div>
-        <p className="lg:hidden text-center text-[10px] text-slate-600 mt-4">Stremio2Trakt v{__APP_VERSION__}</p>
       </div>
     </aside>
   );

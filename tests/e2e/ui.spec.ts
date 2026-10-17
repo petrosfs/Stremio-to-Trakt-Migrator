@@ -53,5 +53,8 @@ test('no horizontal overflow and PWA manifest', async ({ page, request }) => {
   expect(overflow).toBeLessThanOrEqual(0);
   const manifest = await (await request.get('./manifest.webmanifest')).json();
   expect(manifest.short_name).toBe('Stremio2Trakt');
+  // Version is shown discreetly in the footer, not in the app name.
+  await expect(page.getByTestId('version')).toHaveText(/^v\d+\.\d+\.\d+$/);
+  await expect(page.getByText(/Stremio2Trakt v\d/i)).toHaveCount(0);
   expect(manifest.icons.length).toBe(3);
 });

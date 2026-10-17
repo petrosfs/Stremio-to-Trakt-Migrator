@@ -25,6 +25,7 @@ export interface Recorder {
   posts: { path: string; body: any }[];
   stremioBodies: any[];
   tokenPolls: number;
+  tokenBodies: any[];
   linkReads: number;
 }
 
@@ -34,7 +35,7 @@ const PNG_1PX = Buffer.from(
 );
 
 export async function mockApis(page: Page, opts: { traktExisting?: boolean } = {}): Promise<Recorder> {
-  const rec: Recorder = { posts: [], stremioBodies: [], tokenPolls: 0, linkReads: 0 };
+  const rec: Recorder = { posts: [], stremioBodies: [], tokenPolls: 0, tokenBodies: [], linkReads: 0 };
   const json = (route: Route, status: number, body: unknown, headers: Record<string, string> = {}) =>
     route.fulfill({
       status,
@@ -85,7 +86,7 @@ export async function mockApis(page: Page, opts: { traktExisting?: boolean } = {
   });
 
   // ---- Trakt ----
-  await page.route('https://api.trakt.tv/**', async (route) => {
+  const traktHandler = async (route: Route) => {
     const req = route.request();
     const url = new URL(req.url());
     const p = url.pathname;
@@ -93,9 +94,10 @@ export async function mockApis(page: Page, opts: { traktExisting?: boolean } = {
     if (p === '/oauth/device/code') {
       return json(route, 200, { device_code: 'dc', user_code: 'TRAKT123', verification_url: 'https://trakt.tv/activate', expires_in: 600, interval: 1 });
     }
+    if (p.startsWith('/oauth/') && url.hostname !== 'auth.trakt.tv') return json(route, 404, { error: 'use auth.trakt.tv' });
     if (p === '/oauth/device/token') {
       rec.tokenPolls++;
-      if (!req.postDataJSON().client_secret) return json(route, 401, {});
+      rec.tokenBodies.push(req.postDataJSON());
       return rec.tokenPolls < 2
         ? json(route, 400, {})
         : json(route, 200, { access_token: 'at', refresh_token: 'rt', expires_in: 86400, created_at: Math.floor(Date.now() / 1000) });
@@ -127,17 +129,21 @@ export async function mockApis(page: Page, opts: { traktExisting?: boolean } = {
     });
     if (p.endsWith('/remove')) return json(route, 200, { deleted: count(body), not_found: { movies: [], shows: [] } });
     return json(route, 201, { added: count(body), existing: { movies: 0, shows: 0, episodes: 0 }, not_found: { movies: [], shows: [] } });
-  });
+  };
+  await page.route('https://api.trakt.tv/**', traktHandler);
+  await page.route('https://auth.trakt.tv/**', traktHandler);
 
   return rec;
 }
 
 /** Saves Trakt keys through the settings dialog. */
-export async function setTraktKeys(page: Page) {
+export async function setTraktKeys(page: Page, secret?: string) {
   await page.getByTestId('keys').click();
   const dialog = page.getByRole('dialog');
+  // Redirect URI shown for the Trakt app is this page's https/http address, not the OOB urn.
+  await dialog.getByText('http://localhost:4173/', { exact: true }).waitFor();
   await dialog.locator('input').first().fill('client_id_1234567890');
-  await dialog.locator('input[type=password]').fill('client_secret_1234567890');
+  if (secret) await dialog.locator('input[type=password]').fill(secret);
   await dialog.locator('button[type=submit]').click();
 }
 

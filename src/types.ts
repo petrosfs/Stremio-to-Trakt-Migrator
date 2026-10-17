@@ -41,7 +41,8 @@ export type Destination = string;
 
 export interface TraktKeys {
   clientId: string;
-  clientSecret: string;
+  /** Optional: apps created on Trakt since Oct 2026 have no secret. */
+  clientSecret?: string;
 }
 
 export interface TraktAuth {

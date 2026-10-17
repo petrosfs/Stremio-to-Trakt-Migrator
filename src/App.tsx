@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence } from 'motion/react';
 import { AlertCircle, BookMarked, ChevronRight, History, KeyRound, Languages, LayoutList, LogOut, Settings } from 'lucide-react';
 import { useI18n } from './i18n';
+import logo from './assets/logo.svg';
 import {
   CATEGORIES,
   type Category,
@@ -576,9 +577,7 @@ export default function App() {
       <main className="flex-1 flex flex-col min-w-0">
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sm:px-8 sticky top-0 z-10 shrink-0 gap-3">
           <div className="flex items-center gap-2 text-sm min-w-0">
-            <div className="lg:hidden w-7 h-7 bg-indigo-500 rounded-lg flex items-center justify-center shrink-0">
-              <History className="w-3.5 h-3.5 text-white" />
-            </div>
+            <img src={logo} alt="" width={28} height={28} className="lg:hidden w-7 h-7 shrink-0" />
             <span className="text-slate-400 hidden sm:inline">Stremio → Trakt</span>
             <span className="text-slate-400 hidden sm:inline">/</span>
             <span className="text-slate-900 font-medium truncate">{t('app.title')}</span>
@@ -782,7 +781,12 @@ export default function App() {
         </div>
 
         <footer className="min-h-10 bg-slate-50 border-t border-slate-200 px-4 sm:px-8 py-2 flex flex-wrap gap-2 items-center justify-between text-[10px] text-slate-400 font-medium uppercase tracking-widest">
-          <span>{t('app.privacy')}</span>
+          <span className="flex items-center gap-3">
+            {t('app.privacy')}
+            <span className="normal-case tracking-normal text-slate-300 font-mono" data-testid="version" title="Version">
+              v{__APP_VERSION__}
+            </span>
+          </span>
           <div className="flex items-center gap-2">
             <div className={`w-1.5 h-1.5 rounded-full ${username ? 'bg-emerald-500' : 'bg-rose-400'}`} />
             Trakt

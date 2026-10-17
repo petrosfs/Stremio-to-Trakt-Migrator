@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { Copy, ExternalLink, KeyRound } from 'lucide-react';
 import Modal from './Modal';
 import type { TraktKeys } from '../types';
+import { appRedirectUri } from '../lib/trakt';
 import { useI18n } from '../i18n';
 
-const REDIRECT = 'urn:ietf:wg:oauth:2.0:oob';
 
 function CopyField({ value }: { value: string }) {
   const { t } = useI18n();
@@ -42,7 +42,7 @@ export default function SettingsModal({
   const [clientSecret, setClientSecret] = useState(initial?.clientSecret || '');
   const { t } = useI18n();
   const origin = window.location.origin;
-  const valid = clientId.trim().length > 10 && clientSecret.trim().length > 10;
+  const valid = clientId.trim().length > 10;
 
   return (
     <Modal onClose={onClose}>
@@ -57,17 +57,17 @@ export default function SettingsModal({
         <li>
           {t('settings.s1a')}{' '}
           <a
-            href="https://trakt.tv/oauth/applications/new"
+            href="https://app.trakt.tv/settings/apps"
             target="_blank"
             rel="noreferrer"
             className="text-indigo-600 font-semibold hover:underline inline-flex items-center gap-0.5"
           >
-            trakt.tv → New Application <ExternalLink className="w-3 h-3" />
+            Trakt → My Apps <ExternalLink className="w-3 h-3" />
           </a>{' '}
           {t('settings.s1b')}
         </li>
         <li>{t('settings.s2')}</li>
-        <li>Redirect URI: <CopyField value={REDIRECT} /></li>
+        <li>Redirect URI: <CopyField value={appRedirectUri()} /></li>
         <li>Javascript (CORS) origins: <CopyField value={origin} /></li>
         <li>{t('settings.s5')}</li>
       </ol>
@@ -76,7 +76,7 @@ export default function SettingsModal({
         className="space-y-3"
         onSubmit={(e) => {
           e.preventDefault();
-          if (valid) onSave({ clientId: clientId.trim(), clientSecret: clientSecret.trim() });
+          if (valid) onSave({ clientId: clientId.trim(), ...(clientSecret.trim() ? { clientSecret: clientSecret.trim() } : {}) });
         }}
       >
         <label className="block">
@@ -90,7 +90,8 @@ export default function SettingsModal({
           />
         </label>
         <label className="block">
-          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Client Secret</span>
+          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Client Secret</span>{' '}
+          <span className="text-[10px] text-slate-400">{t('settings.secretOptional')}</span>
           <input
             type="password"
             value={clientSecret}

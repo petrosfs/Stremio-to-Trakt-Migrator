@@ -26,14 +26,14 @@
 
 ## Κλειδιά Trakt
 
-Η σύνδεση γίνεται με δική σου εφαρμογή στο Trakt:
+Η σύνδεση γίνεται με δική σου εφαρμογή στο Trakt. Χρειάζεται μόνο το **Client ID**:
 
-1. Άνοιξε το https://trakt.tv/oauth/applications/new
-2. **Name:** ό,τι θέλεις
-3. **Redirect URI:** `urn:ietf:wg:oauth:2.0:oob`
-4. **Javascript (CORS) origins:** η διεύθυνση του site, π.χ. `https://petrosfs.github.io`
-5. Αποθήκευσε και βάλε το **Client ID** και το **Client Secret** στις ρυθμίσεις (εικονίδιο κλειδιού).
+1. Άνοιξε το https://app.trakt.tv/settings/apps και φτιάξε νέα εφαρμογή.
+2. **Redirect URI:** η διεύθυνση του site, `https://petrosfs.github.io/Stremio-to-Trakt-Migrator/`
+3. **Javascript (CORS) origins:** `https://petrosfs.github.io`
+4. Βάλε το **Client ID** στις ρυθμίσεις της εφαρμογής (εικονίδιο κλειδιού).
 
+Οι νέες εφαρμογές του Trakt δεν έχουν Client Secret. Αν η δική σου έχει, μπορείς να το συμπληρώσεις προαιρετικά.
 Τα κλειδιά μένουν αποθηκευμένα μόνο σε αυτόν τον browser.
 
 ## Ανάπτυξη

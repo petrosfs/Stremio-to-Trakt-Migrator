@@ -27,6 +27,9 @@ test.describe('full migration', () => {
     await expect(page.getByTestId('log')).toContainText('1 χωρίς IMDB');
 
     await connectTrakt(page);
+    // New Trakt apps have no secret: it must not be sent.
+    expect(rec.tokenBodies.length).toBeGreaterThan(0);
+    for (const b of rec.tokenBodies) expect(b).not.toHaveProperty('client_secret');
 
     // Deselect "The Godfather" in Continue Watching.
     await page.getByTestId('stat-continueWatching').click();
@@ -90,8 +93,10 @@ test.describe('full migration', () => {
   test('skip-existing off sends everything without checking', async ({ page }) => {
     const rec = await mockApis(page, { traktExisting: true });
     await page.goto('./');
-    await setTraktKeys(page);
+    await setTraktKeys(page, 'legacy_secret_123');
     await connectTrakt(page);
+    // Older apps that still have a secret keep sending it.
+    expect(rec.tokenBodies.at(-1)).toMatchObject({ client_secret: 'legacy_secret_123' });
     await page.getByLabel('Email').fill('me@example.com');
     await page.getByLabel('Κωδικός').fill('secret');
     await page.getByRole('button', { name: 'Σύνδεση & φόρτωση' }).click();
