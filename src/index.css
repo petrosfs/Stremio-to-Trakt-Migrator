@@ -27,3 +27,44 @@ body {
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #475569;
 }
+
+/* ---------- Dark theme ----------
+   The UI is written with light-theme utilities; in dark mode they are remapped here
+   (unlayered rules win over Tailwind's utility layer). The sidebar is already dark. */
+html.dark { color-scheme: dark; }
+.dark .bg-slate-100 { background-color: #020617; }
+.dark .bg-white { background-color: #0f172a; }
+.dark .bg-slate-50 { background-color: rgb(30 41 59 / 0.5); }
+.dark .bg-slate-50\/50 { background-color: rgb(30 41 59 / 0.3); }
+.dark .bg-slate-200, .dark .disabled\:bg-slate-300:disabled { background-color: #334155; }
+.dark .hover\:bg-slate-50:hover { background-color: #1e293b; }
+.dark .hover\:bg-slate-50\/50:hover { background-color: rgb(30 41 59 / 0.4); }
+.dark .border-slate-200, .dark .border-slate-200\/50 { border-color: #334155; }
+.dark .border-slate-100, .dark .border-slate-50 { border-color: #1e293b; }
+.dark .text-slate-900 { color: #f1f5f9; }
+.dark .text-slate-800 { color: #e2e8f0; }
+.dark .text-slate-700 { color: #cbd5e1; }
+.dark .text-slate-600 { color: #94a3b8; }
+.dark .text-indigo-600 { color: #818cf8; }
+.dark .text-indigo-700 { color: #a5b4fc; }
+.dark .text-violet-600 { color: #a78bfa; }
+.dark .text-violet-700 { color: #c4b5fd; }
+.dark .text-emerald-600 { color: #34d399; }
+.dark .text-amber-700 { color: #fbbf24; }
+.dark .text-amber-800 { color: #fcd34d; }
+.dark .bg-indigo-50 { background-color: rgb(99 102 241 / 0.15); }
+.dark .bg-indigo-100 { background-color: rgb(99 102 241 / 0.25); }
+.dark .bg-violet-50, .dark .hover\:bg-violet-50:hover { background-color: rgb(139 92 246 / 0.15); }
+.dark .bg-emerald-50 { background-color: rgb(16 185 129 / 0.12); }
+.dark .bg-emerald-50\/20 { background-color: rgb(16 185 129 / 0.06); }
+.dark .bg-emerald-100 { background-color: rgb(16 185 129 / 0.2); }
+.dark .bg-amber-50 { background-color: rgb(245 158 11 / 0.1); }
+.dark .bg-amber-100 { background-color: rgb(245 158 11 / 0.2); }
+.dark .hover\:bg-rose-50:hover { background-color: rgb(244 63 94 / 0.12); }
+.dark .border-violet-200 { border-color: rgb(139 92 246 / 0.4); }
+.dark .border-rose-200 { border-color: rgb(244 63 94 / 0.4); }
+.dark .border-emerald-200 { border-color: rgb(16 185 129 / 0.35); }
+.dark .border-amber-200, .dark .border-amber-300 { border-color: rgb(245 158 11 / 0.35); }
+.dark .shadow-indigo-100 { --tw-shadow-color: transparent; }
+.dark .ring-indigo-200 { --tw-ring-color: rgb(99 102 241 / 0.5); }
+.dark aside { border-right: 1px solid #1e293b; }

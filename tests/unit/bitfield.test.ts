@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decodeWatched, parseWatchedField, sortVideos } from '../../src/lib/bitfield';
+import { decodeWatched, encodeWatched, parseWatchedField, sortVideos } from '../../src/lib/bitfield';
 
 const ep = (n: number, s = 1, id = 'tt2934286') => `${id}:${s}:${n}`;
 
@@ -43,5 +43,25 @@ describe('watched bitfield (stremio-core test vectors)', () => {
       { id: 'b', season: 1, episode: 1 },
     ]);
     expect(sorted.map((v) => v.id)).toEqual(['x', 'b', 'a', 'c']);
+  });
+});
+
+describe('encodeWatched', () => {
+  const videos = Array.from({ length: 9 }, (_, i) => `tt2934286:1:${i + 1}`);
+  it('matches stremio-core anchor/length and round-trips', () => {
+    const flags = [true, true, true, true, true, false, false, false, false];
+    const enc = encodeWatched(videos, flags)!;
+    expect(enc.startsWith('tt2934286:1:5:5:')).toBe(true);
+    expect(decodeWatched(enc, videos)).toEqual(flags);
+    // Same bitfield bytes as Stremio's own test vector.
+    expect(Array.from(parseWatchedField(enc)!.bytes)).toEqual(Array.from(parseWatchedField('tt2934286:1:5:5:eJyTZwAAAEAAIA==')!.bytes));
+  });
+  it('handles gaps and long lists', () => {
+    const many = Array.from({ length: 30 }, (_, i) => `tt1:1:${i + 1}`);
+    const flags = many.map((_, i) => i % 3 === 0);
+    expect(decodeWatched(encodeWatched(many, flags)!, many)).toEqual(flags);
+  });
+  it('returns null when nothing is watched', () => {
+    expect(encodeWatched(videos, videos.map(() => false))).toBeNull();
   });
 });

@@ -9,12 +9,20 @@ export interface StremioItem {
   name: string;
   poster?: string;
   watchedAt?: string;
+  /** Playback progress 0-100 for items in progress (from Stremio timeOffset/duration). */
+  progress?: number;
+  /** Trakt rating 1-10 (from Stremio likes: loved = 9, liked = 7). */
+  rating?: number;
+  /** For repeat plays of a movie: which play this is (2, 3, …). The first play has none. */
+  play?: number;
+  /** Last time the item changed in Stremio (library mtime or last watch), ISO. */
+  changedAt?: string;
   season?: number;
   episode?: number;
 }
 
-export type Category = 'collection' | 'watchlist' | 'history' | 'continueWatching';
-export const CATEGORIES: Category[] = ['collection', 'watchlist', 'history', 'continueWatching'];
+export type Category = 'collection' | 'watchlist' | 'history' | 'continueWatching' | 'rated';
+export const CATEGORIES: Category[] = ['collection', 'watchlist', 'history', 'continueWatching', 'rated'];
 
 export type MigrationData = Record<Category, StremioItem[]>;
 

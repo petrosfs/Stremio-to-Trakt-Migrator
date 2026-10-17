@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence } from 'motion/react';
-import { AlertCircle, BookMarked, ChevronRight, History, KeyRound, Languages, LayoutList, LogOut, Settings } from 'lucide-react';
+import { AlertCircle, BookMarked, ChevronRight, History, KeyRound, Languages, LayoutList, LogOut, Monitor, Moon, Settings, Sun } from 'lucide-react';
+import { useTheme } from './theme';
 import { useI18n } from './i18n';
 import logo from './assets/logo.svg';
 import {
@@ -29,8 +30,10 @@ import Sidebar from './components/Sidebar';
 import SourceCard, { type SourceTab } from './components/SourceCard';
 import TransferCard, { type Prefs, type Step } from './components/TransferCard';
 import ItemsPanel, { type TypeFilter } from './components/ItemsPanel';
+import ReverseCard from './components/ReverseCard';
+import { fetchTraktSide, planReverse, undoChanges, type ReverseOptions, type ReversePlan, type ReverseUndo } from './lib/reverse';
 
-const DEFAULT_PREFS: Prefs = { library: 'skip', watchlist: 'watchlist', continue: 'watchlist', history: 'history' };
+const DEFAULT_PREFS: Prefs = { library: 'skip', watchlist: 'watchlist', continue: 'watchlist', history: 'history', rated: 'ratings' };
 
 type Source =
   | { kind: 'items'; items: any[]; raw?: any }
@@ -51,6 +54,8 @@ const errText = (t: (k: string, v?: any) => string, e: unknown) => {
 
 export default function App() {
   const { t, lang, setLang } = useI18n();
+  const { theme, cycle: cycleTheme } = useTheme();
+  const ThemeIcon = theme === 'dark' ? Moon : theme === 'light' ? Sun : Monitor;
 
   // ---------- Log ----------
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -152,6 +157,7 @@ export default function App() {
   const [sourceTab, setSourceTab] = useState<SourceTab>(() => (load<SourceTab>('source_tab') === 'file' ? 'file' : 'account'));
   const [source, setSource] = useState<Source | null>(null);
   const [metas, setMetas] = useState<Record<string, stremio.SeriesMeta>>({});
+  const [extras, setExtras] = useState<stremio.ClassifyExtras>({});
   const [episodeDate, setEpisodeDate] = useState<EpisodeDateMode>(() => load<EpisodeDateMode>('episode_date') || 'released');
   const [loadingLib, setLoadingLib] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -168,7 +174,7 @@ export default function App() {
   const parsed = useMemo<ParseResult | null>(() => {
     if (!source) return null;
     if (source.kind === 'html') return source.result;
-    const r = stremio.classify(source.items, metas, episodeDate);
+    const r = stremio.classify(source.items, metas, episodeDate, extras);
     if (source.raw) {
       const names: Record<string, string> = {};
       for (const it of r.data.collection) names[it.id] = it.name;
@@ -176,18 +182,15 @@ export default function App() {
       for (const ep of legacyNextEpisodes(source.raw, names)) if (!keys.has(ep.key)) r.data.continueWatching.push(ep);
     }
     return r;
-  }, [source, metas, episodeDate]);
+  }, [source, metas, episodeDate, extras]);
 
   const data = useMemo<MigrationData | null>(() => {
     if (!parsed) return null;
     if (!Object.keys(dateOverrides).length) return parsed.data;
     const fix = (arr: StremioItem[]) => arr.map((it) => (dateOverrides[it.key] ? { ...it, watchedAt: dateOverrides[it.key] } : it));
-    return {
-      collection: fix(parsed.data.collection),
-      watchlist: fix(parsed.data.watchlist),
-      history: fix(parsed.data.history),
-      continueWatching: fix(parsed.data.continueWatching),
-    };
+    const out = {} as MigrationData;
+    for (const c of CATEGORIES) out[c] = fix(parsed.data[c]);
+    return out;
   }, [parsed, dateOverrides]);
 
   const isSelected = useCallback((cat: Category, key: string) => !excluded.has(`${cat}|${key}`), [excluded]);
@@ -227,7 +230,7 @@ export default function App() {
     if (r.stats.seriesFailed) addLog(t('msg.seriesFailed', { n: r.stats.seriesFailed }), 'err');
   };
 
-  const loadItems = async (items: any[], raw?: any) => {
+  const loadItems = async (items: any[], raw?: any, authKey?: string) => {
     const ids = stremio.seriesNeedingMeta(items);
     let m: Record<string, stremio.SeriesMeta> = {};
     if (ids.length) {
@@ -235,10 +238,20 @@ export default function App() {
       m = await stremio.fetchMetas(ids, (done) => setCurrentAction(`Cinemeta ${done}/${ids.length}`));
       addLog(t('msg.metasDone', { ok: Object.keys(m).length, n: ids.length }), Object.keys(m).length === ids.length ? 'ok' : 'err');
     }
+    const ex: stremio.ClassifyExtras = {};
+    const repeats = stremio.moviesWithRepeats(items);
+    if (repeats.length) ex.movieReleases = await stremio.fetchMovieReleases(repeats);
+    if (authKey) {
+      const cands = stremio.likeCandidates(items);
+      addLog(t('msg.likes', { n: cands.length }));
+      ex.likes = await stremio.fetchLikes(authKey, cands, (done) => setCurrentAction(`Likes ${done}/${cands.length}`));
+      addLog(t('msg.likesDone', { n: Object.keys(ex.likes).length }), 'ok');
+    }
     setMetas(m);
+    setExtras(ex);
     setSource({ kind: 'items', items, raw });
     resetForNewSource();
-    logParsed(stremio.classify(items, m, episodeDate));
+    logParsed(stremio.classify(items, m, episodeDate, ex));
   };
 
   const loadStremioLibrary = async (authKey: string) => {
@@ -248,7 +261,7 @@ export default function App() {
       const items = await stremio.getLibrary(authKey);
       addLog(t('msg.libLoaded', { n: items.length }), 'ok');
       setFileName(null);
-      await loadItems(items);
+      await loadItems(items, undefined, authKey);
     } catch (e) {
       addLog(errText(t, e), 'err');
       if (e instanceof stremio.StremioError && /session/i.test(e.message)) {
@@ -353,9 +366,17 @@ export default function App() {
   useEffect(() => save('sync_prefs', prefs), [prefs]);
   useEffect(() => save('skip_existing', skipExisting), [skipExisting]);
 
+  // Incremental transfers: remember when the last complete transfer ran for this account pair.
+  const syncKey = `last_sync:${stremioAuth?.email || 'file'}:${username || ''}`;
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
+  const [onlyNew, setOnlyNew] = useState<boolean>(() => load<boolean>('only_new') ?? false);
+  useEffect(() => setLastSyncAt(username ? load<string>(syncKey) : null), [syncKey, username]);
+  useEffect(() => save('only_new', onlyNew), [onlyNew]);
+  const sinceFilter = onlyNew && lastSyncAt ? lastSyncAt : null;
+
   const destName = useCallback(
     (d: Destination) =>
-      d === 'watchlist' ? 'Watchlist' : d === 'history' ? 'History' : lists.find((l) => String(l.id) === d)?.name || t('msg.listN', { id: d }),
+      d === 'watchlist' ? 'Watchlist' : d === 'history' ? 'History' : d === 'playback' ? t('transfer.playback') : d === 'ratings' ? t('transfer.ratings') : lists.find((l) => String(l.id) === d)?.name || t('msg.listN', { id: d }),
     [lists, t],
   );
 
@@ -367,16 +388,20 @@ export default function App() {
         { cat: 'watchlist', dest: prefs.watchlist },
         { cat: 'continueWatching', dest: prefs.continue },
         { cat: 'history', dest: prefs.history },
+        { cat: 'rated', dest: prefs.rated },
       ];
       return steps
         .filter((s) => s.dest !== 'skip' && selectedData[s.cat].length > 0)
         .map((s) => {
-          const items = selectedData[s.cat];
+          const all = selectedData[s.cat];
+          // Items without a change date (e.g. from an HTML page) are always kept.
+          const items = sinceFilter ? all.filter((it) => !it.changedAt || it.changedAt > sinceFilter) : all;
           const { toSend, existing: ex } = applyExisting(items, skipExisting ? sets[s.dest] : undefined);
           return { cat: s.cat, label: t(`cat.${s.cat}`), dest: s.dest, items, toSend, existing: skipExisting ? ex : null };
-        });
+        })
+        .filter((s) => s.items.length > 0);
     },
-    [selectedData, prefs, skipExisting, t],
+    [selectedData, prefs, skipExisting, sinceFilter, t],
   );
   const plan = useMemo(() => buildPlan(existing), [buildPlan, existing]);
 
@@ -416,6 +441,7 @@ export default function App() {
     if (!client || !plan.length) return;
     const ctrl = new AbortController();
     syncAbort.current = ctrl;
+    const syncStartedAt = new Date().toISOString();
     setStep('syncing');
     setShowPanel(false);
     setProgress(0);
@@ -479,6 +505,10 @@ export default function App() {
         addLog(t('msg.stopped'), 'err');
         setStep('ready');
       } else {
+        if (username) {
+          save(syncKey, syncStartedAt);
+          setLastSyncAt(syncStartedAt);
+        }
         setProgress(100);
         setCurrentAction(t('transfer.done'));
         setStep('complete');
@@ -521,6 +551,113 @@ export default function App() {
     }
   };
 
+  // ---------- Trakt → Stremio ----------
+  const [revOpts, setRevOpts] = useState<ReverseOptions>(() => ({ watchlist: true, watched: true, likes: true, ...(load<ReverseOptions>('reverse_opts') || {}) }));
+  const [revPlan, setRevPlan] = useState<ReversePlan | null>(null);
+  const [revChecking, setRevChecking] = useState(false);
+  const [revApplying, setRevApplying] = useState(false);
+  const [revUndoing, setRevUndoing] = useState(false);
+  const [revStatus, setRevStatus] = useState('');
+  const [revUndo, setRevUndo] = useState<ReverseUndo | null>(() => load<ReverseUndo>('reverse_undo'));
+  useEffect(() => save('reverse_opts', revOpts), [revOpts]);
+  useEffect(() => setRevPlan(null), [source, revOpts, username]);
+
+  const accountItems = source?.kind === 'items' && !fileName && stremioAuth ? source.items : null;
+
+  const onReverseCheck = async () => {
+    if (!client || !stremioAuth || !accountItems) return;
+    setRevChecking(true);
+    setRevPlan(null);
+    try {
+      addLog(t('msg.reverseFetch'));
+      setRevStatus('Trakt…');
+      const side = await fetchTraktSide(client, revOpts);
+      // Episode lists for shows that are not in the Stremio library yet.
+      const missing = Object.keys(side.shows).filter((id) => !metas[id]);
+      let allMetas = metas;
+      if (missing.length) {
+        const more = await stremio.fetchMetas(missing, (d) => setRevStatus(`Cinemeta ${d}/${missing.length}`));
+        allMetas = { ...metas, ...more };
+        setMetas(allMetas);
+      }
+      // Likes are only known for library items; read the rest before deciding.
+      let likes = extras.likes || {};
+      const known = new Set(stremio.likeCandidates(accountItems).map((c) => c.id));
+      const unknown = Object.entries(side.ratings)
+        .filter(([id]) => !known.has(id))
+        .map(([id, r]) => ({ id, type: r.type }));
+      if (revOpts.likes && unknown.length) {
+        const more = await stremio.fetchLikes(stremioAuth.authKey, unknown, (d) => setRevStatus(`Likes ${d}/${unknown.length}`));
+        likes = { ...likes, ...more };
+      }
+      const plan = planReverse(accountItems, side, allMetas, likes, revOpts);
+      setRevPlan(plan);
+      addLog(
+        t('msg.reversePlan', {
+          lib: plan.summary.addedToLibrary.length,
+          movies: plan.summary.moviesWatched.length,
+          eps: plan.summary.episodesWatched,
+          likes: plan.likes.length,
+        }),
+        'ok',
+      );
+    } catch (e) {
+      addLog(errText(t, e), 'err');
+    } finally {
+      setRevChecking(false);
+      setRevStatus('');
+    }
+  };
+
+  const onReverseApply = async () => {
+    if (!stremioAuth || !accountItems || !revPlan) return;
+    setRevApplying(true);
+    try {
+      // Backup first, so the library can always be restored by hand.
+      download(new Blob([JSON.stringify(accountItems, null, 2)], { type: 'application/json' }), `stremio_library_backup_${today()}.json`);
+      addLog(t('msg.rawSaved'), 'ok');
+      const undo: ReverseUndo = { at: Date.now(), account: stremioAuth.email, originals: revPlan.originals, created: revPlan.created, likes: [] };
+      if (revPlan.changes.length) {
+        await stremio.putLibrary(stremioAuth.authKey, revPlan.changes, (d) => setRevStatus(`Stremio ${d}/${revPlan.changes.length}`));
+      }
+      let failed = 0;
+      for (const [i, l] of revPlan.likes.entries()) {
+        setRevStatus(`Likes ${i + 1}/${revPlan.likes.length}`);
+        if (await stremio.sendLike(stremioAuth.authKey, l.id, l.type, l.status)) undo.likes.push({ id: l.id, type: l.type });
+        else failed++;
+      }
+      setRevUndo(undo);
+      save('reverse_undo', undo);
+      addLog(t('msg.reverseDone', { n: revPlan.changes.length, likes: undo.likes.length }), 'ok');
+      if (failed) addLog(t('msg.likesFailed', { n: failed }), 'err');
+      setRevPlan(null);
+      await loadStremioLibrary(stremioAuth.authKey);
+    } catch (e) {
+      addLog(errText(t, e), 'err');
+    } finally {
+      setRevApplying(false);
+      setRevStatus('');
+    }
+  };
+
+  const onReverseUndo = async () => {
+    if (!stremioAuth || !revUndo) return;
+    setRevUndoing(true);
+    try {
+      const items = undoChanges(revUndo);
+      if (items.length) await stremio.putLibrary(stremioAuth.authKey, items);
+      for (const l of revUndo.likes) await stremio.sendLike(stremioAuth.authKey, l.id, l.type, null);
+      addLog(t('msg.reverseUndone', { n: items.length + revUndo.likes.length }), 'ok');
+      setRevUndo(null);
+      save('reverse_undo', null);
+      await loadStremioLibrary(stremioAuth.authKey);
+    } catch (e) {
+      addLog(errText(t, e), 'err');
+    } finally {
+      setRevUndoing(false);
+    }
+  };
+
   const exportZip = () => {
     if (!selectedData) return;
     download(toZip(selectedData), `stremio_library_${today()}.zip`);
@@ -537,8 +674,8 @@ export default function App() {
   const [tab, setTab] = useState<Category>('watchlist');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const syncing = step === 'syncing';
-  const busy = syncing || undoing || checking;
-  const tabDest = { collection: prefs.library, watchlist: prefs.watchlist, continueWatching: prefs.continue, history: prefs.history }[tab];
+  const busy = syncing || undoing || checking || revChecking || revApplying || revUndoing;
+  const tabDest = { collection: prefs.library, watchlist: prefs.watchlist, continueWatching: prefs.continue, history: prefs.history, rated: prefs.rated }[tab];
 
   useEffect(() => {
     document.title = lang === 'el' ? 'Stremio σε Trakt' : 'Stremio to Trakt Migrator';
@@ -584,6 +721,16 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            <button
+              onClick={cycleTheme}
+              title={t(`theme.${theme}`)}
+              aria-label={t(`theme.${theme}`)}
+              data-testid="theme"
+              data-theme={theme}
+              className="p-2 rounded-md border border-slate-200 text-slate-500 hover:text-indigo-600"
+            >
+              <ThemeIcon className="w-4 h-4" />
+            </button>
             <button
               onClick={() => setLang(lang === 'el' ? 'en' : 'el')}
               title={t('header.lang')}
@@ -662,6 +809,14 @@ export default function App() {
                 episodeDate={episodeDate}
                 onEpisodeDate={setEpisodeDate}
                 showEpisodeDate={source?.kind === 'items' && (parsed?.stats.seriesDecoded || 0) > 0}
+                onDownloadRaw={
+                  source?.kind === 'items'
+                    ? () => {
+                        download(new Blob([JSON.stringify(source.items, null, 2)], { type: 'application/json' }), `stremio_library_raw_${today()}.json`);
+                        addLog(t('msg.rawSaved'), 'ok');
+                      }
+                    : undefined
+                }
               />
 
               {data && (
@@ -672,6 +827,9 @@ export default function App() {
                   onPref={(f, v) => setPrefs((p) => ({ ...p, [f]: v }))}
                   skipExisting={skipExisting}
                   onSkipExisting={setSkipExisting}
+                  lastSyncAt={lastSyncAt}
+                  onlyNew={onlyNew}
+                  onOnlyNew={setOnlyNew}
                   plan={plan}
                   destName={destName}
                   checking={checking}
@@ -685,6 +843,27 @@ export default function App() {
                   lastRun={lastRun && lastRun.user === username ? { count: lastRun.steps.reduce((n, s) => n + s.items.length, 0), at: lastRun.at } : null}
                   undoing={undoing}
                   onUndo={undoLast}
+                />
+              )}
+
+              {accountItems && username && (
+                <ReverseCard
+                  opts={revOpts}
+                  onOpt={(f, v) => setRevOpts((o) => ({ ...o, [f]: v }))}
+                  plan={revPlan}
+                  checking={revChecking}
+                  applying={revApplying}
+                  undoing={revUndoing}
+                  disabled={syncing || undoing || checking || loadingLib}
+                  status={revStatus}
+                  onCheck={onReverseCheck}
+                  onApply={onReverseApply}
+                  lastWrite={
+                    revUndo && revUndo.account === stremioAuth?.email
+                      ? { count: revUndo.originals.length + revUndo.created.length + revUndo.likes.length, at: revUndo.at }
+                      : null
+                  }
+                  onUndo={onReverseUndo}
                 />
               )}
             </div>

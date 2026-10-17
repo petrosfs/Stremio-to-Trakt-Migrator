@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { Film, Search } from 'lucide-react';
 import { useI18n } from '../i18n';
 import { CATEGORIES, type Category, type MigrationData, type StremioItem } from '../types';
 
 export type TypeFilter = 'all' | 'movie' | 'show' | 'episode';
-const LIMIT = 300;
 
 function toLocalInput(iso?: string): string {
   if (!iso) return '';
@@ -59,6 +59,22 @@ export default function ItemsPanel(p: Props) {
         (!q || it.name.toLowerCase().includes(q) || it.id.toLowerCase().includes(q)),
     );
   }, [p.data, p.tab, p.typeFilter, query]);
+
+  const watchedEpisodes = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const it of p.data.history) if (it.type === 'episode') m.set(it.id, (m.get(it.id) || 0) + 1);
+    return m;
+  }, [p.data.history]);
+
+  // Only the visible rows are rendered, so large libraries stay fast.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const virtualizer = useVirtualizer({
+    count: filtered.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 68,
+    overscan: 8,
+    getItemKey: (i) => filtered[i].key,
+  });
 
   const selectedCount = filtered.filter((it) => p.isSelected(p.tab, it.key)).length;
   const showDate = (it: StremioItem) => it.watchedAt || p.tab === 'history';
@@ -121,56 +137,76 @@ export default function ItemsPanel(p: Props) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto max-h-[70vh] divide-y divide-slate-50">
-        {filtered.slice(0, LIMIT).map((item) => {
+      <div ref={scrollRef} className="flex-1 overflow-y-auto max-h-[70vh]" data-testid="items-list">
+        {filtered.length === 0 ? (
+          <div className="p-12 text-center text-slate-400 italic text-xs">{t('panel.empty')}</div>
+        ) : (
+          <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+            {virtualizer.getVirtualItems().map((v) => {
+          const item = filtered[v.index];
           const selected = p.isSelected(p.tab, item.key);
-          const inTrakt = p.existing?.has(item.key);
-          return (
-            <div
-              key={item.key}
-              className={`px-4 sm:px-6 py-2.5 flex flex-wrap gap-3 items-center justify-between transition-colors ${selected ? 'hover:bg-slate-50/50' : 'opacity-50'}`}
-            >
-              <label className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="accent-indigo-600 shrink-0"
-                  checked={selected}
-                  disabled={p.disabled}
-                  onChange={(e) => p.onSelect(p.tab, [item.key], e.target.checked)}
-                  aria-label={item.name}
-                />
-                <Poster src={item.poster} />
-                <span className="flex flex-col gap-0.5 min-w-0">
-                  <span className="text-xs font-bold text-slate-900 leading-tight break-words">{item.name}</span>
-                  <span className="flex flex-wrap items-center gap-2">
-                    <span className="text-[9px] font-mono text-indigo-500 bg-indigo-50 px-1 rounded">{item.id}</span>
-                    <span className="text-[9px] text-slate-400 font-medium">{t(`type1.${item.type}`)}</span>
-                    {item.type === 'episode' && (
-                      <span className="text-[9px] text-slate-500 font-bold bg-slate-100 px-1 rounded">S{item.season}E{item.episode}</span>
-                    )}
-                    {inTrakt && <span className="text-[9px] text-emerald-600 font-bold bg-emerald-50 px-1 rounded">{t('panel.inTrakt')}</span>}
-                  </span>
-                </span>
-              </label>
-              {showDate(item) && (
-                <label className="text-[9px] text-slate-400 font-medium text-right flex flex-col items-end">
-                  <span>{p.tab === 'history' ? t('panel.watchDate') : t('panel.activity')}</span>
+            const inTrakt = p.existing?.has(item.key);
+            return (
+              <div
+                key={item.key}
+                data-index={v.index}
+                ref={virtualizer.measureElement}
+                style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${v.start}px)` }}
+                className={`px-4 sm:px-6 py-2.5 flex flex-wrap gap-3 items-center justify-between border-b border-slate-50 transition-colors ${selected ? 'hover:bg-slate-50/50' : 'opacity-50'}`}
+              >
+                <label className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer">
                   <input
-                    type="datetime-local"
-                    value={toLocalInput(item.watchedAt)}
-                    onChange={(e) => p.onDate(item.key, e.target.value)}
+                    type="checkbox"
+                    className="accent-indigo-600 shrink-0"
+                    checked={selected}
                     disabled={p.disabled}
-                    className="bg-slate-50 border border-slate-200 rounded px-1 py-0.5 text-[10px] text-indigo-600 font-bold mt-0.5 outline-none focus:border-indigo-400"
+                    onChange={(e) => p.onSelect(p.tab, [item.key], e.target.checked)}
+                    aria-label={item.name}
                   />
+                  <Poster src={item.poster} />
+                  <span className="flex flex-col gap-0.5 min-w-0">
+                    <span className="text-xs font-bold text-slate-900 leading-tight break-words">{item.name}</span>
+                    <span className="flex flex-wrap items-center gap-2">
+                      <span className="text-[9px] font-mono text-indigo-500 bg-indigo-50 px-1 rounded">{item.id}</span>
+                      <span className="text-[9px] text-slate-400 font-medium">{t(`type1.${item.type}`)}</span>
+                      {item.type === 'episode' && (
+                        <span className="text-[9px] text-slate-500 font-bold bg-slate-100 px-1 rounded">S{item.season}E{item.episode}</span>
+                      )}
+                      {item.type === 'show' && (
+                        <span className="text-[9px] text-slate-500 font-semibold" data-testid="watched-eps">
+                          {t('panel.watchedEps', { n: watchedEpisodes.get(item.id) || 0 })}
+                        </span>
+                      )}
+                      {item.rating !== undefined && (
+                      <span className="text-[9px] text-amber-700 font-bold bg-amber-50 px-1 rounded">★ {item.rating}</span>
+                    )}
+                    {item.play !== undefined && (
+                      <span className="text-[9px] text-slate-500 font-bold bg-slate-100 px-1 rounded">{t('panel.play', { n: item.play })}</span>
+                    )}
+                    {item.progress !== undefined && (
+                        <span className="text-[9px] text-violet-600 font-bold bg-violet-50 px-1 rounded">{Math.round(item.progress)}%</span>
+                      )}
+                      {inTrakt && <span className="text-[9px] text-emerald-600 font-bold bg-emerald-50 px-1 rounded">{t('panel.inTrakt')}</span>}
+                    </span>
+                  </span>
                 </label>
-              )}
-            </div>
-          );
-        })}
-        {filtered.length > LIMIT && (
-          <div className="p-4 text-center text-slate-400 text-[11px]">{t('panel.showing', { n: LIMIT, total: filtered.length })}</div>
+                {showDate(item) && (
+                  <label className="text-[9px] text-slate-400 font-medium text-right flex flex-col items-end">
+                    <span>{p.tab === 'history' ? t('panel.watchDate') : t('panel.activity')}</span>
+                    <input
+                      type="datetime-local"
+                      value={toLocalInput(item.watchedAt)}
+                      onChange={(e) => p.onDate(item.key, e.target.value)}
+                      disabled={p.disabled}
+                      className="bg-slate-50 border border-slate-200 rounded px-1 py-0.5 text-[10px] text-indigo-600 font-bold mt-0.5 outline-none focus:border-indigo-400"
+                    />
+                  </label>
+                )}
+              </div>
+            );
+            })}
+          </div>
         )}
-        {filtered.length === 0 && <div className="p-12 text-center text-slate-400 italic text-xs">{t('panel.empty')}</div>}
       </div>
     </>
   );

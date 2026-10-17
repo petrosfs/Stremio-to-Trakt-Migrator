@@ -29,6 +29,14 @@ describe('sync helpers', () => {
     expect(buildBody(items, false).movies[0]).toEqual({ ids: { imdb: 'tt1' } });
   });
 
+  it('sends ratings only for the ratings destination', () => {
+    const rated: StremioItem = { key: 'movie:tt1', id: 'tt1', type: 'movie', name: 'x', rating: 9 };
+    expect(buildBody([rated], false, true).movies).toEqual([{ ids: { imdb: 'tt1' }, rating: 9 }]);
+    expect(buildBody([rated], false, false).movies).toEqual([{ ids: { imdb: 'tt1' } }]);
+    expect(endpointFor('ratings')).toBe('/sync/ratings');
+    expect(endpointFor('ratings', true)).toBe('/sync/ratings/remove');
+  });
+
   it('maps Trakt entries to item keys', () => {
     expect(traktKey({ type: 'movie', movie: { ids: { imdb: 'tt1' } } })).toBe('movie:tt1');
     expect(traktKey({ type: 'show', show: { ids: { imdb: 'tt2' } } })).toBe('show:tt2');

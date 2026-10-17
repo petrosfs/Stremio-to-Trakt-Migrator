@@ -164,7 +164,7 @@ export class TraktClient {
     }
   }
 
-  async request<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
+  async request<T>(method: 'GET' | 'POST' | 'DELETE', path: string, body?: unknown): Promise<T> {
     return (await this.requestRaw<T>(method, path, body)).data;
   }
 
@@ -182,7 +182,7 @@ export class TraktClient {
     return out;
   }
 
-  private async requestRaw<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<{ data: T; headers: Headers }> {
+  private async requestRaw<T>(method: 'GET' | 'POST' | 'DELETE', path: string, body?: unknown): Promise<{ data: T; headers: Headers }> {
     await this.ensureFresh();
     let refreshed = false;
     for (let attempt = 0; attempt < 5; attempt++) {

@@ -4,7 +4,7 @@ import { useI18n } from '../i18n';
 import type { PlanStep } from '../lib/sync';
 import type { Destination, TraktList } from '../types';
 
-export type Prefs = { library: Destination; watchlist: Destination; continue: Destination; history: Destination };
+export type Prefs = { library: Destination; watchlist: Destination; continue: Destination; history: Destination; rated: Destination };
 export type Step = 'idle' | 'ready' | 'syncing' | 'complete';
 
 interface Props {
@@ -14,6 +14,9 @@ interface Props {
   onPref: (field: keyof Prefs, value: Destination) => void;
   skipExisting: boolean;
   onSkipExisting: (v: boolean) => void;
+  lastSyncAt: string | null;
+  onlyNew: boolean;
+  onOnlyNew: (v: boolean) => void;
   plan: PlanStep[];
   destName: (d: Destination) => string;
   checking: boolean;
@@ -51,11 +54,18 @@ export default function TransferCard(p: Props) {
       onChange={(e) => p.onPref(field, e.target.value)}
     >
       <option value="skip">{t('transfer.skip')}</option>
-      {field !== 'library' && <option value="watchlist">Watchlist</option>}
-      {allowHistory && <option value="history">History</option>}
-      {p.lists.map((l) => (
-        <option key={l.id} value={String(l.id)}>{l.name}</option>
-      ))}
+      {field === 'rated' ? (
+        <option value="ratings">{t('transfer.ratings')}</option>
+      ) : (
+        <>
+          {field !== 'library' && <option value="watchlist">Watchlist</option>}
+          {allowHistory && <option value="history">History</option>}
+          {field === 'continue' && <option value="playback">{t('transfer.playback')}</option>}
+          {p.lists.map((l) => (
+            <option key={l.id} value={String(l.id)}>{l.name}</option>
+          ))}
+        </>
+      )}
     </select>
   );
 
@@ -89,7 +99,9 @@ export default function TransferCard(p: Props) {
             {row('watchlist', t('cat.watchlist'))}
             {row('continue', t('cat.continueWatching'))}
             {row('history', t('cat.history'), true)}
+            {row('rated', t('cat.rated'))}
             <p className="text-[10px] text-slate-400">{t('transfer.collectionHint')}</p>
+            {p.prefs.continue === 'playback' && <p className="text-[10px] text-slate-400">{t('transfer.playbackHint')}</p>}
             <label className="flex items-start gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -104,6 +116,27 @@ export default function TransferCard(p: Props) {
               </span>
             </label>
           </div>
+
+          {p.lastSyncAt && (
+            <label className="flex items-start gap-2 cursor-pointer bg-slate-50 border border-slate-200 rounded-lg p-3">
+              <input
+                type="checkbox"
+                className="mt-0.5 accent-indigo-600"
+                checked={p.onlyNew}
+                disabled={busy}
+                data-testid="only-new"
+                onChange={(e) => p.onOnlyNew(e.target.checked)}
+              />
+              <span>
+                <span className="block text-xs font-semibold text-slate-700">{t('transfer.onlyNew')}</span>
+                <span className="block text-[10px] text-slate-400">
+                  {t('transfer.onlyNewHint', {
+                    date: new Date(p.lastSyncAt).toLocaleString(lang === 'el' ? 'el-GR' : 'en-GB', { dateStyle: 'short', timeStyle: 'short' }),
+                  })}
+                </span>
+              </span>
+            </label>
+          )}
 
           {p.plan.length > 0 && (
             <div className="border border-slate-200 rounded-lg overflow-hidden" data-testid="plan">

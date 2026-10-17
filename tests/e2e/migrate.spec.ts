@@ -133,3 +133,32 @@ test('Trakt sign-in can be cancelled and polling stops', async ({ page }) => {
   await page.waitForTimeout(2500);
   expect(rec.tokenPolls).toBe(polls);
 });
+
+test('continue watching → Trakt playback progress, then undo', async ({ page }) => {
+  const rec = await mockApis(page);
+  await page.goto('./');
+  await setTraktKeys(page);
+  await connectTrakt(page);
+  await page.getByLabel('Email').fill('me@example.com');
+  await page.getByLabel('Κωδικός').fill('secret');
+  await page.getByRole('button', { name: 'Σύνδεση & φόρτωση' }).click();
+  await expect(page.getByTestId('stat-continueWatching')).toContainText('2');
+  await page.getByTestId('dest-library').selectOption('skip');
+  await page.getByTestId('dest-watchlist').selectOption('skip');
+  await page.getByTestId('dest-history').selectOption('skip');
+  await page.getByTestId('dest-continue').selectOption('playback');
+  await page.getByRole('button', { name: 'Μεταφορά τώρα' }).click();
+  await expect(page.getByText('Ολοκληρώθηκε!').first()).toBeVisible({ timeout: 20_000 });
+  const pauses = rec.posts.filter((p) => p.path === '/scrobble/pause').map((p) => p.body);
+  expect(pauses).toEqual([
+    { movie: { title: 'X', year: 2000, ids: { trakt: 238 } }, progress: 36 },
+    { episode: { ids: { trakt: 1393103 } }, progress: 33.3 },
+  ]);
+  // Nothing goes to History through playback.
+  expect(rec.posts.some((p) => p.path === '/sync/history')).toBe(false);
+
+  await page.getByRole('button', { name: 'Αναίρεση τελευταίας μεταφοράς' }).click();
+  await page.getByRole('button', { name: 'Πάτα ξανά για επιβεβαίωση' }).click();
+  await expect(page.getByTestId('log')).toContainText('αφαιρέθηκαν 2 στοιχεία');
+  expect(rec.deletes.sort()).toEqual(['/sync/playback/1', '/sync/playback/2']);
+});

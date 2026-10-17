@@ -58,3 +58,36 @@ test('no horizontal overflow and PWA manifest', async ({ page, request }) => {
   await expect(page.getByText(/Stremio2Trakt v\d/i)).toHaveCount(0);
   expect(manifest.icons.length).toBe(3);
 });
+
+test('large library: all items reachable, only visible rows rendered', async ({ page }) => {
+  await mockApis(page);
+  await page.goto('./');
+  await page.getByRole('button', { name: 'Αρχείο' }).click();
+  const big = Array.from({ length: 1500 }, (_, i) => ({ _id: `tt9${String(i).padStart(6, '0')}`, name: `Movie ${i}`, type: 'movie', state: {} }));
+  await page.getByTestId('file-input').setInputFiles({ name: 'big.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(big)) });
+  await expect(page.getByTestId('stat-watchlist')).toContainText('1500');
+  await page.getByTestId('stat-watchlist').click();
+  const list = page.getByTestId('items-list');
+  expect(await list.locator('input[type=checkbox]').count()).toBeLessThan(80);
+  await list.evaluate((el) => el.scrollTo(0, el.scrollHeight));
+  await expect(page.getByText('Movie 1499', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('selected-count')).toHaveText('1500/1500 επιλεγμένα');
+});
+
+test('theme toggle: system → light → dark, remembered', async ({ page }) => {
+  await mockApis(page);
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.goto('./');
+  const btn = page.getByTestId('theme');
+  await expect(btn).toHaveAttribute('data-theme', 'system');
+  await expect(page.locator('html')).not.toHaveClass(/dark/);
+  await btn.click();
+  await expect(btn).toHaveAttribute('data-theme', 'light');
+  await btn.click();
+  await expect(btn).toHaveAttribute('data-theme', 'dark');
+  await expect(page.locator('html')).toHaveClass(/dark/);
+  await page.reload();
+  await expect(page.locator('html')).toHaveClass(/dark/);
+  const bg = await page.locator('main header').evaluate((el) => getComputedStyle(el).backgroundColor);
+  expect(bg).toBe('rgb(15, 23, 42)');
+});

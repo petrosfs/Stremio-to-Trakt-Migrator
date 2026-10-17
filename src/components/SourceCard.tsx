@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Link2, LogOut, RefreshCw, Upload, UserRound } from 'lucide-react';
+import { Download, Link2, LogOut, RefreshCw, Upload, UserRound } from 'lucide-react';
 import { useI18n } from '../i18n';
 import type { EpisodeDateMode } from '../types';
 
@@ -20,6 +20,8 @@ interface Props {
   episodeDate: EpisodeDateMode;
   onEpisodeDate: (m: EpisodeDateMode) => void;
   showEpisodeDate: boolean;
+  /** Downloads the raw Stremio library items (shown when loaded). */
+  onDownloadRaw?: () => void;
 }
 
 export default function SourceCard(p: Props) {
@@ -163,6 +165,17 @@ export default function SourceCard(p: Props) {
           </div>
           <p className="text-[10px] text-slate-400 mt-3">{t('source.fileHint')}</p>
         </div>
+      )}
+
+      {p.onDownloadRaw && (
+        <button
+          type="button"
+          onClick={p.onDownloadRaw}
+          className="mt-3 w-full text-[11px] font-semibold text-slate-500 hover:text-indigo-600 flex items-center justify-center gap-1.5"
+        >
+          <Download className="w-3.5 h-3.5" />
+          {t('source.downloadRaw')}
+        </button>
       )}
 
       {p.showEpisodeDate && (

@@ -42,7 +42,7 @@ export function legacyNextEpisodes(raw: any, names: Record<string, string>): Str
 export function parseHtml(text: string): ParseResult {
   const doc = new DOMParser().parseFromString(text, 'text/html');
   const links = Array.from(doc.querySelectorAll<HTMLAnchorElement>('a[href*="/detail/"]'));
-  const data: MigrationData = { collection: [], watchlist: [], history: [], continueWatching: [] };
+  const data: MigrationData = { collection: [], watchlist: [], history: [], continueWatching: [], rated: [] };
   const seen = new Set<string>();
 
   for (const link of links) {

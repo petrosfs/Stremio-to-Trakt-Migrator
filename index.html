@@ -8,6 +8,14 @@
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
     <title>Stremio to Trakt Migrator</title>
+    <script>
+      // Apply the saved theme before the first paint (no light flash in dark mode).
+      try {
+        var t = JSON.parse(localStorage.getItem('theme') || '"system"');
+        if (t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches))
+          document.documentElement.classList.add('dark');
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

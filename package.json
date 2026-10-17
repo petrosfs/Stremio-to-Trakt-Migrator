@@ -1,7 +1,7 @@
 {
   "name": "stremio-to-trakt-migrator",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Μεταφορά της βιβλιοθήκης σου από το Stremio στο Trakt.tv, απευθείας από τον browser.",
   "type": "module",
   "scripts": {
@@ -13,6 +13,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@tanstack/react-virtual": "^3.14.21",
     "fflate": "^0.8.3",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",

@@ -76,6 +76,11 @@ describe('classify', () => {
     expect(r.data.history).toHaveLength(0);
   });
 
+  it('computes playback progress from timeOffset/duration', () => {
+    const r = classify([movie('tt3', { timeOffset: 2500, duration: 10000 }), movie('tt4', { timeOffset: 5 })], {});
+    expect(r.data.continueWatching.map((i) => i.progress)).toEqual([25, undefined]);
+  });
+
   it('adds the current episode to continue watching', () => {
     const r = classify([series('tt2934286', { timeOffset: 300, video_id: 'tt2934286:1:6' })], meta);
     expect(r.data.continueWatching[0]).toMatchObject({ type: 'episode', season: 1, episode: 6 });
@@ -91,6 +96,35 @@ describe('classify', () => {
 
   it('lists series needing metadata', () => {
     expect(seriesNeedingMeta([series('tt1', { watched: 'x' }), series('tt2'), series('tt3', { video_id: 'tt3:1:1' }), movie('tt4', { watched: 'x' })])).toEqual(['tt1', 'tt3']);
+  });
+});
+
+describe('likes, repeat plays, change dates', () => {
+  it('maps Stremio likes to Trakt ratings (loved 9, liked 7)', () => {
+    const r = classify([movie('tt1'), series('tt2'), movie('tt3')], {}, 'released', { likes: { tt1: 'loved', tt2: 'liked' } });
+    expect(r.data.rated.map((i) => [i.key, i.rating])).toEqual([['movie:tt1', 9], ['show:tt2', 7]]);
+  });
+
+  it('adds earlier plays of a movie watched several times at its release date', () => {
+    const r = classify(
+      [movie('tt1', { timesWatched: 3, flaggedWatched: 1, lastWatched: '2024-05-10T20:00:00.000Z' })],
+      {},
+      'released',
+      { movieReleases: { tt1: '2010-07-16T00:00:00.000Z' } },
+    );
+    expect(r.data.history.map((i) => [i.key, i.play, i.watchedAt])).toEqual([
+      ['movie:tt1', undefined, '2024-05-10T20:00:00.000Z'],
+      ['movie:tt1#2', 2, '2010-07-16T00:00:00.000Z'],
+      ['movie:tt1#3', 3, '2010-07-16T00:01:00.000Z'],
+    ]);
+  });
+
+  it('records when each item last changed (mtime or last watch)', () => {
+    const r = classify(
+      [movie('tt1', { lastWatched: '2024-01-01T00:00:00.000Z' }, { _mtime: '2024-03-01T00:00:00.000Z' }), movie('tt2', {}, { _mtime: '2023-01-01T00:00:00.000Z' })],
+      {},
+    );
+    expect(r.data.watchlist.map((i) => i.changedAt)).toEqual(['2024-03-01T00:00:00.000Z', '2023-01-01T00:00:00.000Z']);
   });
 });
 
