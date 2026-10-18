@@ -303,3 +303,60 @@ export function undoChanges(undo: ReverseUndo, now = new Date().toISOString()): 
   const hidden = undo.created.map((c) => ({ ...newLibraryItem(c.id, c.type, c.name, now, false), temp: false }));
   return [...restored, ...hidden];
 }
+
+// ---------- Restore from a backup file ----------
+
+export interface RestorePlan {
+  /** Items written back exactly as they were in the backup. */
+  restore: any[];
+  /** Items that did not exist in the backup; they are removed from the library. */
+  hide: any[];
+  /** Share of backup items found in the current library (a low value means another account). */
+  overlap: number;
+}
+
+/** JSON with sorted keys, so two copies of an item compare equal regardless of key order. */
+function stable(v: unknown): string {
+  return JSON.stringify(v, (_k, val) =>
+    val && typeof val === 'object' && !Array.isArray(val)
+      ? Object.fromEntries(Object.keys(val).sort().map((k) => [k, (val as any)[k]]))
+      : val,
+  );
+}
+const withoutMtime = (x: any) => {
+  const { _mtime: _m, ...rest } = x || {};
+  return rest;
+};
+
+/** Is this a list of Stremio library items (as saved by the app)? */
+export function isLibraryBackup(items: unknown): items is any[] {
+  return Array.isArray(items) && items.length > 0 && items.every((x) => typeof x?._id === 'string' && x.state && typeof x.state === 'object');
+}
+
+/**
+ * What it takes to bring the library back to a backup: items that differ are written back as they were,
+ * items that did not exist are removed from the library (Stremio cannot delete them).
+ */
+export function planRestore(current: any[], backup: any[], now = new Date().toISOString()): RestorePlan {
+  const cur = new Map<string, any>();
+  for (const x of current) if (typeof x?._id === 'string') cur.set(x._id, x);
+  const bak = new Map<string, any>();
+  for (const x of backup) if (typeof x?._id === 'string') bak.set(x._id, x);
+
+  const restore: any[] = [];
+  let found = 0;
+  for (const [id, b] of bak) {
+    const c = cur.get(id);
+    if (c) found++;
+    if (!c || stable(withoutMtime(c)) !== stable(withoutMtime(b))) restore.push({ ...b, _mtime: now });
+  }
+  const hide: any[] = [];
+  for (const [id, c] of cur) {
+    if (bak.has(id)) continue;
+    const st = c.state || {};
+    const alreadyGone = c.removed === true && !c.temp && !(Number(st.timesWatched) > 0) && !st.watched && !(Number(st.timeOffset) > 0);
+    if (alreadyGone) continue;
+    hide.push({ ...c, removed: true, temp: false, state: emptyState(), _mtime: now });
+  }
+  return { restore, hide, overlap: bak.size ? found / bak.size : 0 };
+}

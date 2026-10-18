@@ -127,3 +127,56 @@ test('Trakt → Stremio: preview, backup, write, undo', async ({ page }) => {
   await page.getByTestId('mode-toStremio').click();
   await expect(page.getByTestId('rev-undo')).toHaveCount(0);
 });
+
+test('Trakt → Stremio: restore the library from the downloaded backup', async ({ page }) => {
+  const rec = await mockApis(page, { traktReverse: true, likes: { tt0068646: 'liked' } });
+  await page.goto('./');
+  await page.getByTestId('mode-toStremio').click();
+  // Before anything is written: how it works, and the download is announced with its file name.
+  await expect(page.getByTestId('rev-how')).toContainText('Πώς λειτουργεί');
+  await setTraktKeys(page);
+  await connectTrakt(page);
+  await stremioLogin(page);
+  await page.getByTestId('rev-check').click();
+  await expect(page.getByTestId('rev-warning')).toContainText(/stremio_library_backup_\d{4}-\d{2}-\d{2}\.json/);
+
+  const apply = page.getByTestId('rev-apply');
+  await apply.click();
+  const download = page.waitForEvent('download');
+  await apply.click();
+  const backup = await download;
+  await expect(page.getByTestId('rev-progress')).toContainText('Ολοκληρώθηκε');
+  await expect(page.getByTestId('rev-progress')).toContainText('Λήψη αντιγράφου στον υπολογιστή σου');
+  expect(rec.puts).toHaveLength(1);
+
+  // Restore: preview first, nothing written until confirmed.
+  await page.getByTestId('restore-file').setInputFiles(await backup.path());
+  const plan = page.getByTestId('restore-plan');
+  await expect(plan).toContainText('Θα γίνουν όπως ήταν στο αντίγραφο');
+  await plan.locator('summary').first().click();
+  // Inception and Breaking Bad were marked as watched, Interstellar was re-added; Dune was new.
+  await expect(plan.locator('summary', { hasText: 'όπως ήταν' })).toContainText('3');
+  await expect(plan).toContainText('Inception, Interstellar, Breaking Bad');
+  await expect(plan.locator('summary', { hasText: 'αφαιρεθούν' })).toContainText('1');
+  await expect(plan).not.toContainText('δεν μοιάζει');
+  expect(rec.puts).toHaveLength(1);
+
+  await page.getByTestId('restore-apply').click();
+  const before = page.waitForEvent('download');
+  await page.getByTestId('restore-apply').click();
+  expect((await before).suggestedFilename()).toMatch(/_before_restore\.json$/);
+  await expect(page.getByTestId('log')).toContainText('Επαναφορά από αντίγραφο: 3 στοιχεία όπως ήταν, 1 αφαιρέθηκαν.');
+  const restored = Object.fromEntries(rec.puts[1].map((c: any) => [c._id, c]));
+  expect(restored.tt1375666.state).toEqual(library.find((x) => x._id === 'tt1375666')!.state);
+  expect(restored.tt0903747.state.watched).toBe(library.find((x) => x._id === 'tt0903747')!.state.watched);
+  expect(restored.tt1160419).toMatchObject({ removed: true, temp: false });
+  expect(restored.tt0816692.removed).toBe(true);
+  // The undo of the earlier write no longer applies.
+  await expect(page.getByTestId('rev-undo')).toHaveCount(0);
+  await expect(page.getByTestId('rev-progress')).toContainText('Ολοκληρώθηκε');
+
+  // A file that is not a backup is rejected.
+  await page.getByTestId('restore-file').setInputFiles({ name: 'x.json', mimeType: 'application/json', buffer: Buffer.from('{"a":1}') });
+  await expect(page.getByTestId('restore-plan')).toContainText('δεν είναι αντίγραφο');
+  await expect(page.getByTestId('restore-apply')).toHaveCount(0);
+});

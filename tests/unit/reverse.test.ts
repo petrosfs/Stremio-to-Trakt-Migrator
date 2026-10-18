@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { decodeWatched, encodeWatched } from '../../src/lib/bitfield';
-import { likeForRating, planReverse, undoChanges, type TraktSide } from '../../src/lib/reverse';
+import { isLibraryBackup, likeForRating, planRestore, planReverse, undoChanges, type TraktSide } from '../../src/lib/reverse';
 
 const NOW = '2026-10-17T10:00:00.000Z';
 const ALL = { watchlist: true, watched: true, likes: true };
@@ -200,5 +200,40 @@ describe('undoChanges', () => {
     expect(out[0]).toEqual({ ...orig, _mtime: NOW });
     expect(out[1]).toMatchObject({ _id: 'tt3', type: 'series', removed: true, temp: false });
     expect(out[1].state.timesWatched).toBe(0);
+  });
+});
+
+describe('planRestore', () => {
+  const NOW2 = '2026-10-18T10:00:00.000Z';
+  const before = [lib('tt1'), lib('tt2', { state: { timesWatched: 0, flaggedWatched: 0 } }), lib('tt3', { removed: true })];
+
+  it('writes back changed items, removes new ones and leaves the rest', () => {
+    const now = [
+      { ...lib('tt1'), _mtime: '2026-10-18T09:00:00.000Z' }, // only the date changed
+      lib('tt2', { state: { timesWatched: 1, flaggedWatched: 1 } }), // marked as watched
+      lib('tt3', { removed: false }), // re-added
+      lib('tt9', { name: 'New' }), // added after the backup
+      lib('tt8', { removed: true }), // already removed and empty
+    ];
+    const r = planRestore(now, before, NOW2);
+    expect(r.restore.map((x) => x._id)).toEqual(['tt2', 'tt3']);
+    expect(r.restore[0]).toEqual({ ...before[1], _mtime: NOW2 });
+    expect(r.hide.map((x) => x._id)).toEqual(['tt9']);
+    expect(r.hide[0]).toMatchObject({ removed: true, temp: false, _mtime: NOW2 });
+    expect(r.hide[0].state.timesWatched).toBe(0);
+    expect(r.overlap).toBe(1);
+  });
+
+  it('ignores key order and reports low overlap for another account', () => {
+    const reordered = before.map((x) => Object.fromEntries(Object.entries(x).reverse()));
+    expect(planRestore(reordered, before, NOW2).restore).toEqual([]);
+    expect(planRestore([lib('tt7')], before, NOW2).overlap).toBe(0);
+  });
+
+  it('recognises backup files', () => {
+    expect(isLibraryBackup(before)).toBe(true);
+    expect(isLibraryBackup([])).toBe(false);
+    expect(isLibraryBackup([{ foo: 1 }])).toBe(false);
+    expect(isLibraryBackup({ result: before })).toBe(false);
   });
 });

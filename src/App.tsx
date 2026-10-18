@@ -31,7 +31,18 @@ import SourceCard, { type SourceTab } from './components/SourceCard';
 import TransferCard, { type Prefs, type Step } from './components/TransferCard';
 import ItemsPanel, { type TypeFilter } from './components/ItemsPanel';
 import ReverseCard, { ReversePreview } from './components/ReverseCard';
-import { fetchTraktSide, planReverse, undoChanges, type ReverseOptions, type ReversePlan, type ReverseUndo, type TraktSide } from './lib/reverse';
+import {
+  fetchTraktSide,
+  isLibraryBackup,
+  planRestore,
+  planReverse,
+  undoChanges,
+  type RestorePlan,
+  type ReverseOptions,
+  type ReversePlan,
+  type ReverseUndo,
+  type TraktSide,
+} from './lib/reverse';
 
 const DEFAULT_PREFS: Prefs = { library: 'skip', watchlist: 'watchlist', continue: 'watchlist', history: 'history', rated: 'ratings' };
 
@@ -585,6 +596,7 @@ export default function App() {
   const onReverseCheck = async () => {
     if (!client || !stremioAuth || !accountItems) return;
     setRevChecking(true);
+    setRevProgress(null);
     setRevInput(null);
     setRevExclude(new Set());
     try {
@@ -629,23 +641,35 @@ export default function App() {
     }
   };
 
+  const backupName = `stremio_library_backup_${today()}.json`;
+  /** Steps shown while writing to Stremio; `current` = steps.length means done. */
+  const [revProgress, setRevProgress] = useState<{ steps: string[]; current: number } | null>(null);
+  const saveBackup = (items: any[], name: string) => {
+    download(new Blob([JSON.stringify(items, null, 2)], { type: 'application/json' }), name);
+    addLog(t('msg.backupSaved', { file: name }), 'ok');
+  };
+
   const onReverseApply = async () => {
     if (!stremioAuth || !accountItems || !revPlan) return;
     setRevApplying(true);
+    const steps = ['backup', ...(revPlan.changes.length ? ['write'] : []), ...(revPlan.likes.length ? ['likes'] : []), 'reload'];
+    const step = (k: string) => setRevProgress({ steps, current: steps.indexOf(k) });
     try {
-      // Backup first, so the library can always be restored by hand.
-      download(new Blob([JSON.stringify(accountItems, null, 2)], { type: 'application/json' }), `stremio_library_backup_${today()}.json`);
-      addLog(t('msg.rawSaved'), 'ok');
+      // Backup first, so the library can always be restored.
+      step('backup');
+      saveBackup(accountItems, backupName);
       const undo: ReverseUndo = { at: Date.now(), account: stremioAuth.email, originals: revPlan.originals, created: revPlan.created, likes: [] };
       // Stamp with the time of writing, so every Stremio app sees these as the newest version.
       const stamp = new Date().toISOString();
       const changes = revPlan.changes.map((c) => ({ ...c, _mtime: stamp }));
       if (changes.length) {
-        await stremio.putLibrary(stremioAuth.authKey, changes, (d) => setRevStatus(`Stremio ${d}/${changes.length}`));
+        step('write');
+        await stremio.putLibrary(stremioAuth.authKey, changes, (d) => setRevStatus(`${d}/${changes.length}`));
       }
       let failed = 0;
+      if (revPlan.likes.length) step('likes');
       for (const [i, l] of revPlan.likes.entries()) {
-        setRevStatus(`Likes ${i + 1}/${revPlan.likes.length}`);
+        setRevStatus(`${i + 1}/${revPlan.likes.length}`);
         if (await stremio.sendLike(stremioAuth.authKey, l.id, l.type, l.status)) undo.likes.push({ id: l.id, type: l.type });
         else failed++;
       }
@@ -653,12 +677,67 @@ export default function App() {
       save('reverse_undo', undo);
       addLog(t('msg.reverseDone', { n: revPlan.changes.length, likes: undo.likes.length }), 'ok');
       if (failed) addLog(t('msg.likesFailed', { n: failed }), 'err');
+      setRevStatus('');
+      step('reload');
       setRevInput(null);
       await loadStremioLibrary(stremioAuth.authKey);
+      setRevProgress({ steps, current: steps.length });
     } catch (e) {
       addLog(errText(t, e), 'err');
     } finally {
       setRevApplying(false);
+      setRevStatus('');
+    }
+  };
+
+  // ---------- Restore from a backup file ----------
+  const [restore, setRestore] = useState<{ file: string; plan: RestorePlan | null; error?: boolean } | null>(null);
+  const [restoring, setRestoring] = useState(false);
+  // A plan made against another version of the library must not be applied.
+  useEffect(() => setRestore(null), [source, stremioAuth]);
+
+  const onRestoreFile = (file: File) => {
+    if (!accountItems) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const items = libraryItemsFromJson(JSON.parse(String(reader.result || '')));
+        if (!isLibraryBackup(items)) throw new Error('invalid');
+        setRestore({ file: file.name, plan: planRestore(accountItems, items) });
+      } catch {
+        setRestore({ file: file.name, plan: null, error: true });
+        addLog(t('restore.invalid'), 'err');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const onRestoreApply = async () => {
+    if (!stremioAuth || !accountItems || !restore?.plan) return;
+    const { plan } = restore;
+    setRestoring(true);
+    const steps = ['backup', 'write', 'reload'];
+    const step = (k: string) => setRevProgress({ steps, current: steps.indexOf(k) });
+    try {
+      step('backup');
+      saveBackup(accountItems, backupName.replace('.json', '_before_restore.json'));
+      step('write');
+      const stamp = new Date().toISOString();
+      const changes = [...plan.restore, ...plan.hide].map((c) => ({ ...c, _mtime: stamp }));
+      await stremio.putLibrary(stremioAuth.authKey, changes, (d) => setRevStatus(`${d}/${changes.length}`));
+      // The undo data no longer matches the library.
+      setRevUndo(null);
+      save('reverse_undo', null);
+      addLog(t('msg.restoreDone', { back: plan.restore.length, hide: plan.hide.length }), 'ok');
+      setRevStatus('');
+      step('reload');
+      setRestore(null);
+      await loadStremioLibrary(stremioAuth.authKey);
+      setRevProgress({ steps, current: steps.length });
+    } catch (e) {
+      addLog(errText(t, e), 'err');
+    } finally {
+      setRestoring(false);
       setRevStatus('');
     }
   };
@@ -699,7 +778,7 @@ export default function App() {
   const [tab, setTab] = useState<Category>('watchlist');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const syncing = step === 'syncing';
-  const busy = syncing || undoing || checking || revChecking || revApplying || revUndoing;
+  const busy = syncing || undoing || checking || revChecking || revApplying || revUndoing || restoring;
   const tabDest = { collection: prefs.library, watchlist: prefs.watchlist, continueWatching: prefs.continue, history: prefs.history, rated: prefs.rated }[tab];
 
   useEffect(() => {
@@ -879,6 +958,14 @@ export default function App() {
                       : null
                   }
                   onUndo={onReverseUndo}
+                  backupName={backupName}
+                  progress={revProgress}
+                  canRestore={!!accountItems}
+                  restore={restore}
+                  restoring={restoring}
+                  onRestoreFile={onRestoreFile}
+                  onRestoreApply={onRestoreApply}
+                  onRestoreCancel={() => setRestore(null)}
                 />
               </div>
               <ReversePreview
