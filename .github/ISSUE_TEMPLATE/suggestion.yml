@@ -1,0 +1,19 @@
+name: 💡 Πρόταση βελτίωσης / Suggestion
+description: Πρότεινε μια νέα δυνατότητα ή μια βελτίωση.
+title: "[Πρόταση] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: Τι θα ήθελες; / What would you like?
+      description: Περίγραψε την ιδέα σου με λίγα λόγια.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Γιατί θα βοηθούσε; / Why would it help?
+      description: Προαιρετικό.
+    validations:
+      required: false

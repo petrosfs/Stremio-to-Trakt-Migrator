@@ -1,0 +1,53 @@
+name: 🐞 Πρόβλημα / Bug
+description: Κάτι δεν δουλεύει όπως θα έπρεπε.
+title: "[Πρόβλημα] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ⚠️ Τα issues είναι **δημόσια**. **Μην** γράφεις κωδικούς, Client ID/Secret του Trakt, και **μην** ανεβάζεις αρχεία backup ή export της βιβλιοθήκης σου.
+        ⚠️ Issues are **public**. **Do not** include passwords, Trakt Client ID/Secret, or upload library backup/export files.
+  - type: textarea
+    id: what
+    attributes:
+      label: Τι έγινε; / What happened?
+      description: Τι περίμενες να γίνει και τι έγινε τελικά. Αν εμφανίστηκε μήνυμα σφάλματος, γράψε το.
+    validations:
+      required: true
+  - type: dropdown
+    id: direction
+    attributes:
+      label: Κατεύθυνση / Direction
+      options:
+        - Stremio → Trakt
+        - Trakt → Stremio
+        - Άλλο / Other
+    validations:
+      required: false
+  - type: textarea
+    id: steps
+    attributes:
+      label: Βήματα / Steps
+      description: Τι πάτησες για να εμφανιστεί το πρόβλημα (προαιρετικό).
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: Έκδοση / Version
+      description: Αν τη βλέπεις στην εφαρμογή.
+      placeholder: π.χ. v1.3.1
+    validations:
+      required: false
+  - type: dropdown
+    id: device
+    attributes:
+      label: Συσκευή / Device
+      options:
+        - Υπολογιστής / Computer
+        - Κινητό Android / Android phone
+        - iPhone
+        - Άλλο / Other
+    validations:
+      required: false

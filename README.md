@@ -145,6 +145,10 @@ npm run screenshots  # ξαναβγάζει τα screenshots του README (docs
 
 React 19 · TypeScript · Vite · Tailwind CSS · fflate · Vitest · Playwright · Trakt API v2 · Stremio API · Cinemeta
 
+## Σχόλια και προτάσεις
+
+Έχεις μια ιδέα ή βρήκες πρόβλημα; [Άνοιξε ένα issue](https://github.com/petrosfs/Stremio-to-Trakt-Migrator/issues/new/choose) (χρειάζεται λογαριασμός GitHub).
+
 ## Άδεια
 
 [MIT](LICENSE) © petrosfs
